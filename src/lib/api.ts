@@ -1,6 +1,6 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
-  "https://level-antoinette-sagiyqwgey-311e9cc7.koyeb.app/api";
+  "https://reve-backend.onrender.com/api";
 
 const getAuthToken = () => localStorage.getItem("admin_token");
 
