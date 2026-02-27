@@ -64,7 +64,8 @@ const Categories = () => {
           ...c,
           subcategories: [...(c.subcategories || [])].sort((a, b) => a.name.localeCompare(b.name)),
         }))
-        .sort((a, b) => a.name.localeCompare(b.name));
+        // Show newest categories first so fresh entries appear at the top of the admin list
+        .sort((a, b) => (b.id ?? 0) - (a.id ?? 0));
 
       setCategories(sortedCategories);
       setProducts(productsRes);
