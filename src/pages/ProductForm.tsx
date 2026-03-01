@@ -838,6 +838,42 @@ const ProductForm = () => {
     }
   };
 
+  const importDimensionsFromProduct = async () => {
+    if (!selectedImportProductId) {
+      toast.error('Select a product to import dimensions');
+      return;
+    }
+    try {
+      const product = await apiGet<Product>(`/products/${selectedImportProductId}/`);
+      const dimensions = Array.isArray(product.dimensions)
+        ? product.dimensions.map((row) => ({
+            measurement: row.measurement || '',
+            values: row.values || {},
+          }))
+        : [];
+      const images = Array.isArray(product.dimension_images)
+        ? product.dimension_images.map((img) => ({
+            size: img.size || '',
+            url: img.url || '',
+          }))
+        : [];
+
+      setValue('dimensions', dimensions);
+      replaceDimensions(dimensions);
+      setDimensionColumns(deriveDimensionColumnsFromRows(dimensions));
+
+      setValue('dimension_images', images);
+      replaceDimensionImages(images);
+
+      setValue('dimension_paragraph', product.dimension_paragraph || '');
+      setValue('show_dimensions_table', product.show_dimensions_table !== false);
+
+      toast.success(`Imported dimensions from ${product.name}`);
+    } catch {
+      toast.error('Failed to import dimensions from that product');
+    }
+  };
+
   const importFabricsFromProduct = async () => {
     if (!selectedImportProductId) {
       toast.error('Select a product to import fabrics');
@@ -1645,6 +1681,9 @@ const ProductForm = () => {
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={importLongDescriptionFromProduct}>
                   Import long desc
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={importDimensionsFromProduct}>
+                  Import dimensions
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={importFaqsFromProduct}>
                   Import FAQs
