@@ -34,6 +34,7 @@ const Mattresses = () => {
   const [editing, setEditing] = useState<MattressOption>(emptyOption());
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
+  const [subcategories, setSubcategories] = useState<{ id: number; name: string; category: number }[]>([]);
 
   const load = async () => {
     try {
@@ -53,6 +54,9 @@ const Mattresses = () => {
     apiGet<{ id: number; name: string }[]>("/categories/")
       .then((res) => setCategories(Array.isArray(res) ? res : []))
       .catch(() => setCategories([]));
+    apiGet<{ id: number; name: string; category: number }[]>("/subcategories/")
+      .then((res) => setSubcategories(Array.isArray(res) ? res : []))
+      .catch(() => setSubcategories([]));
   }, []);
 
   const resetForm = () => setEditing(emptyOption());
@@ -62,6 +66,7 @@ const Mattresses = () => {
     const prices = (editing.prices || []).filter((p) => p.size_label?.trim());
     payload.prices = prices;
     payload.categories = (editing.categories || []).filter(Boolean);
+    payload.subcategories = (editing.subcategories || []).filter(Boolean);
     try {
       if (editing.id) {
         await apiPatch(`/mattress-options/${editing.id}/`, payload);
@@ -173,8 +178,8 @@ const Mattresses = () => {
             </div>
 
             <div className="col-span-2">
-              <p className="text-sm font-semibold text-espresso mb-2">Limit to Categories (optional)</p>
-              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+              <p className="text-sm font-semibold text-espresso mb-2">Limit to Categories/Subcategories (optional)</p>
+              <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
                 {categories.map((cat) => {
                   const checked = (editing.categories || []).includes(cat.id);
                   return (
@@ -193,12 +198,30 @@ const Mattresses = () => {
                     </label>
                   );
                 })}
+                {subcategories.map((sub) => {
+                  const checked = (editing.subcategories || []).includes(sub.id);
+                  return (
+                    <label key={`sub-${sub.id}`} className="flex items-center gap-2 text-sm pl-4">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          const next = new Set(editing.subcategories || []);
+                          if (e.target.checked) next.add(sub.id);
+                          else next.delete(sub.id);
+                          setEditing({ ...editing, subcategories: Array.from(next) });
+                        }}
+                      />
+                      {sub.name}
+                    </label>
+                  );
+                })}
                 {categories.length === 0 && (
                   <p className="text-xs text-muted-foreground col-span-2">No categories found.</p>
                 )}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Leave empty to show this mattress for all products; otherwise it only appears for the selected categories.
+                Leave empty to show this mattress for all products; otherwise it only appears for the selected categories/subcategories.
               </p>
             </div>
             <label className="text-sm font-medium text-espresso">
