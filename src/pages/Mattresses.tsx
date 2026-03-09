@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
-import { apiDelete, apiGet, apiPatch, apiPost } from "../lib/api";
+import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "../lib/api";
 import type { MattressOptionPrice, ProductMattress } from "../lib/types";
 import { toast } from "sonner";
 
@@ -128,14 +128,44 @@ const Mattresses = () => {
                 onChange={(e) => setEditing({ ...editing, description: e.target.value })}
               />
             </label>
-            <label className="col-span-2 text-sm font-medium text-espresso">
-              Image URL
-              <input
-                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-                value={editing.image_url || ""}
-                onChange={(e) => setEditing({ ...editing, image_url: e.target.value })}
-              />
-            </label>
+            <div className="col-span-2 text-sm font-medium text-espresso space-y-2">
+              <div className="flex items-center justify-between">
+                <span>Image</span>
+                {editing.image_url && (
+                  <button
+                    className="text-xs text-primary hover:underline"
+                    onClick={() => setEditing({ ...editing, image_url: "" })}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              {editing.image_url && (
+                <img
+                  src={editing.image_url}
+                  alt="Mattress"
+                  className="h-24 w-24 rounded-md border object-cover"
+                />
+              )}
+              <div className="flex gap-2">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="w-full rounded-md border px-3 py-2 text-sm"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      const res = await apiUpload("/uploads/", file);
+                      setEditing({ ...editing, image_url: res.url });
+                      toast.success("Image uploaded");
+                    } catch {
+                      toast.error("Image upload failed");
+                    }
+                  }}
+                />
+              </div>
+            </div>
             <label className="text-sm font-medium text-espresso">
               Base price
               <input
