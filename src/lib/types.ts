@@ -103,6 +103,7 @@ export interface ProductMattress {
   description?: string;
   image_url?: string;
   price?: number | null;
+  original_price?: number | null;
   enable_bunk_positions?: boolean;
   price_top?: number | null;
   price_bottom?: number | null;
@@ -110,6 +111,19 @@ export interface ProductMattress {
   source_product?: number | null;
   source_product_name?: string | null;
   source_product_slug?: string | null;
+  prices?: MattressOptionPrice[];
+  is_active?: boolean;
+  sort_order?: number;
+}
+
+export interface MattressOptionPrice {
+  id?: number;
+  size_label: string;
+  price?: number | null;
+  original_price?: number | null;
+  price_top?: number | null;
+  price_bottom?: number | null;
+  price_both?: number | null;
 }
 
 export interface ProductFaq {

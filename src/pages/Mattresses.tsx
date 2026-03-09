@@ -1,0 +1,337 @@
+import { useEffect, useMemo, useState } from "react";
+import { Plus, Save, Trash2 } from "lucide-react";
+import { apiDelete, apiGet, apiPatch, apiPost } from "../lib/api";
+import type { MattressOptionPrice, ProductMattress } from "../lib/types";
+import { toast } from "sonner";
+
+type MattressOption = ProductMattress;
+
+const emptyOption = (): MattressOption => ({
+  name: "",
+  description: "",
+  image_url: "",
+  price: null,
+  original_price: null,
+  enable_bunk_positions: false,
+  price_top: null,
+  price_bottom: null,
+  price_both: null,
+  sort_order: 0,
+  prices: [],
+});
+
+const emptySizeRow = (): MattressOptionPrice => ({
+  size_label: "",
+  price: null,
+  original_price: null,
+  price_top: null,
+  price_bottom: null,
+  price_both: null,
+});
+
+const Mattresses = () => {
+  const [items, setItems] = useState<MattressOption[]>([]);
+  const [editing, setEditing] = useState<MattressOption>(emptyOption());
+  const [loading, setLoading] = useState(false);
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      const res = await apiGet<MattressOption[]>("/mattress-options/");
+      setItems(res || []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load mattresses");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const resetForm = () => setEditing(emptyOption());
+
+  const handleSave = async () => {
+    const payload = { ...editing };
+    const prices = (editing.prices || []).filter((p) => p.size_label?.trim());
+    payload.prices = prices;
+    try {
+      if (editing.id) {
+        await apiPatch(`/mattress-options/${editing.id}/`, payload);
+        toast.success("Mattress updated");
+      } else {
+        await apiPost("/mattress-options/", payload);
+        toast.success("Mattress created");
+      }
+      resetForm();
+      await load();
+    } catch (err) {
+      console.error(err);
+      toast.error("Save failed");
+    }
+  };
+
+  const handleDelete = async (id?: number) => {
+    if (!id) return;
+    if (!window.confirm("Delete this mattress option?")) return;
+    try {
+      await apiDelete(`/mattress-options/${id}/`);
+      toast.success("Deleted");
+      await load();
+    } catch {
+      toast.error("Delete failed");
+    }
+  };
+
+  const activeSizes = useMemo(
+    () => editing.prices || [],
+    [editing.prices]
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-espresso">Mattresses</h1>
+          <p className="text-sm text-muted-foreground">
+            Define global mattress options, per-size pricing, and bunk-bed pricing.
+          </p>
+        </div>
+        <button
+          className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+          onClick={resetForm}
+        >
+          <Plus className="h-4 w-4" />
+          New mattress
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="col-span-2 text-sm font-medium text-espresso">
+              Name
+              <input
+                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                value={editing.name || ""}
+                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+              />
+            </label>
+            <label className="col-span-2 text-sm font-medium text-espresso">
+              Description
+              <textarea
+                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                rows={3}
+                value={editing.description || ""}
+                onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+              />
+            </label>
+            <label className="col-span-2 text-sm font-medium text-espresso">
+              Image URL
+              <input
+                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                value={editing.image_url || ""}
+                onChange={(e) => setEditing({ ...editing, image_url: e.target.value })}
+              />
+            </label>
+            <label className="text-sm font-medium text-espresso">
+              Base price
+              <input
+                type="number"
+                step="0.01"
+                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                value={editing.price ?? ""}
+                onChange={(e) => setEditing({ ...editing, price: e.target.value === "" ? null : Number(e.target.value) })}
+              />
+            </label>
+            <label className="text-sm font-medium text-espresso">
+              Original price (discount ref)
+              <input
+                type="number"
+                step="0.01"
+                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                value={editing.original_price ?? ""}
+                onChange={(e) =>
+                  setEditing({ ...editing, original_price: e.target.value === "" ? null : Number(e.target.value) })
+                }
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium text-espresso">
+              <input
+                type="checkbox"
+                checked={Boolean(editing.enable_bunk_positions)}
+                onChange={(e) => setEditing({ ...editing, enable_bunk_positions: e.target.checked })}
+              />
+              Enable bunk positions (Top/Bottom/Both)
+            </label>
+            <label className="text-sm font-medium text-espresso">
+              Bunk price top
+              <input
+                type="number"
+                step="0.01"
+                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                value={editing.price_top ?? ""}
+                onChange={(e) => setEditing({ ...editing, price_top: e.target.value === "" ? null : Number(e.target.value) })}
+              />
+            </label>
+            <label className="text-sm font-medium text-espresso">
+              Bunk price bottom
+              <input
+                type="number"
+                step="0.01"
+                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                value={editing.price_bottom ?? ""}
+                onChange={(e) =>
+                  setEditing({ ...editing, price_bottom: e.target.value === "" ? null : Number(e.target.value) })
+                }
+              />
+            </label>
+            <label className="text-sm font-medium text-espresso">
+              Bunk price both
+              <input
+                type="number"
+                step="0.01"
+                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                value={editing.price_both ?? ""}
+                onChange={(e) =>
+                  setEditing({ ...editing, price_both: e.target.value === "" ? null : Number(e.target.value) })
+                }
+              />
+            </label>
+          </div>
+
+          <div className="rounded-lg border bg-muted/40 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold text-espresso">Per-size pricing</p>
+              <button
+                className="text-sm text-primary hover:underline"
+                onClick={() => setEditing({ ...editing, prices: [...(editing.prices || []), emptySizeRow()] })}
+              >
+                Add size
+              </button>
+            </div>
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {activeSizes.length === 0 && <p className="text-xs text-muted-foreground">No size overrides added.</p>}
+              {activeSizes.map((row, idx) => (
+                <div key={idx} className="grid grid-cols-6 gap-2 items-center bg-white rounded-md border p-2">
+                  <input
+                    placeholder="Size (e.g., 4ft6 Double)"
+                    className="col-span-2 rounded-md border px-2 py-1 text-sm"
+                    value={row.size_label}
+                    onChange={(e) => {
+                      const next = [...activeSizes];
+                      next[idx] = { ...next[idx], size_label: e.target.value };
+                      setEditing({ ...editing, prices: next });
+                    }}
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Price"
+                    className="col-span-1 rounded-md border px-2 py-1 text-sm"
+                    value={row.price ?? ""}
+                    onChange={(e) => {
+                      const next = [...activeSizes];
+                      next[idx] = { ...next[idx], price: e.target.value === "" ? null : Number(e.target.value) };
+                      setEditing({ ...editing, prices: next });
+                    }}
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Orig."
+                    className="col-span-1 rounded-md border px-2 py-1 text-sm"
+                    value={row.original_price ?? ""}
+                    onChange={(e) => {
+                      const next = [...activeSizes];
+                      next[idx] = { ...next[idx], original_price: e.target.value === "" ? null : Number(e.target.value) };
+                      setEditing({ ...editing, prices: next });
+                    }}
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Both"
+                    className="col-span-1 rounded-md border px-2 py-1 text-sm"
+                    value={row.price_both ?? ""}
+                    onChange={(e) => {
+                      const next = [...activeSizes];
+                      next[idx] = { ...next[idx], price_both: e.target.value === "" ? null : Number(e.target.value) };
+                      setEditing({ ...editing, prices: next });
+                    }}
+                  />
+                  <button
+                    className="text-red-500 hover:text-red-600"
+                    onClick={() => {
+                      const next = activeSizes.filter((_, i) => i !== idx);
+                      setEditing({ ...editing, prices: next });
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-semibold text-espresso hover:bg-muted"
+              onClick={resetForm}
+            >
+              Reset
+            </button>
+            <button
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90"
+              onClick={handleSave}
+            >
+              <Save className="h-4 w-4" />
+              Save mattress
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-espresso">Existing mattresses</h2>
+            {loading && <span className="text-xs text-muted-foreground">Loading…</span>}
+          </div>
+          <div className="space-y-3">
+            {items.length === 0 && <p className="text-sm text-muted-foreground">No mattresses yet.</p>}
+            {items.map((item) => (
+              <div
+                key={item.id}
+                className="rounded-lg border px-3 py-3 hover:border-primary/50 transition cursor-pointer bg-white"
+                onClick={() => setEditing({ ...item })}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-base font-semibold text-espresso">{item.name}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{item.description}</p>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Base: {item.price ?? 0} {item.enable_bunk_positions ? "• bunk" : ""}
+                      {item.prices && item.prices.length ? ` • ${item.prices.length} size prices` : ""}
+                    </div>
+                  </div>
+                  <button
+                    className="text-red-500 hover:text-red-600"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(item.id);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Mattresses;

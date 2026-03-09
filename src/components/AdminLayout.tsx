@@ -21,6 +21,7 @@ const sidebarLinks = [
   { name: 'Categories', href: '/categories', icon: Layers },
   { name: 'Collections', href: '/collections', icon: Folder },
   { name: 'Hero Slider', href: '/hero-slides', icon: Image },
+  { name: 'Mattresses', href: '/mattresses', icon: Layers },
   { name: 'Orders', href: '/orders', icon: ShoppingCart },
   { name: 'Reviews', href: '/reviews', icon: Star },
   { name: 'Delivery & Returns', href: '/policies', icon: Truck },
