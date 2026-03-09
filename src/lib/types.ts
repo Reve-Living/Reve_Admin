@@ -114,6 +114,7 @@ export interface ProductMattress {
   prices?: MattressOptionPrice[];
   is_active?: boolean;
   sort_order?: number;
+  categories?: number[];
 }
 
 export interface MattressOptionPrice {

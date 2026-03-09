@@ -33,6 +33,7 @@ const Mattresses = () => {
   const [items, setItems] = useState<MattressOption[]>([]);
   const [editing, setEditing] = useState<MattressOption>(emptyOption());
   const [loading, setLoading] = useState(false);
+  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
 
   const load = async () => {
     try {
@@ -49,6 +50,9 @@ const Mattresses = () => {
 
   useEffect(() => {
     load();
+    apiGet<{ id: number; name: string }[]>("/categories/")
+      .then((res) => setCategories(Array.isArray(res) ? res : []))
+      .catch(() => setCategories([]));
   }, []);
 
   const resetForm = () => setEditing(emptyOption());
@@ -57,6 +61,7 @@ const Mattresses = () => {
     const payload = { ...editing };
     const prices = (editing.prices || []).filter((p) => p.size_label?.trim());
     payload.prices = prices;
+    payload.categories = (editing.categories || []).filter(Boolean);
     try {
       if (editing.id) {
         await apiPatch(`/mattress-options/${editing.id}/`, payload);
@@ -165,6 +170,36 @@ const Mattresses = () => {
                   }}
                 />
               </div>
+            </div>
+
+            <div className="col-span-2">
+              <p className="text-sm font-semibold text-espresso mb-2">Limit to Categories (optional)</p>
+              <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
+                {categories.map((cat) => {
+                  const checked = (editing.categories || []).includes(cat.id);
+                  return (
+                    <label key={cat.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          const next = new Set(editing.categories || []);
+                          if (e.target.checked) next.add(cat.id);
+                          else next.delete(cat.id);
+                          setEditing({ ...editing, categories: Array.from(next) });
+                        }}
+                      />
+                      {cat.name}
+                    </label>
+                  );
+                })}
+                {categories.length === 0 && (
+                  <p className="text-xs text-muted-foreground col-span-2">No categories found.</p>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Leave empty to show this mattress for all products; otherwise it only appears for the selected categories.
+              </p>
             </div>
             <label className="text-sm font-medium text-espresso">
               Base price
