@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "../lib/api";
-import type { MattressOptionPrice, ProductMattress } from "../lib/types";
+import type { MattressOptionPrice, ProductMattress, Category as ApiCategory, SubCategory as ApiSubCategory } from "../lib/types";
 import { toast } from "sonner";
 
 type MattressOption = ProductMattress;
@@ -33,8 +33,8 @@ const Mattresses = () => {
   const [items, setItems] = useState<MattressOption[]>([]);
   const [editing, setEditing] = useState<MattressOption>(emptyOption());
   const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
-  const [subcategories, setSubcategories] = useState<{ id: number; name: string; category: number }[]>([]);
+  const [categories, setCategories] = useState<ApiCategory[]>([]);
+  const [subcategories, setSubcategories] = useState<ApiSubCategory[]>([]);
 
   const load = async () => {
     try {
@@ -51,11 +51,18 @@ const Mattresses = () => {
 
   useEffect(() => {
     load();
-    apiGet<{ id: number; name: string }[]>("/categories/")
-      .then((res) => setCategories(Array.isArray(res) ? res : []))
+    apiGet<ApiCategory[]>("/categories/")
+      .then((res) => {
+        const list = Array.isArray(res) ? res : [];
+        const bedOnly = list.filter((c) => (c.slug || c.name || "").toLowerCase().includes("bed"));
+        setCategories(bedOnly);
+      })
       .catch(() => setCategories([]));
-    apiGet<{ id: number; name: string; category: number }[]>("/subcategories/")
-      .then((res) => setSubcategories(Array.isArray(res) ? res : []))
+    apiGet<ApiSubCategory[]>("/subcategories/")
+      .then((res) => {
+        const list = Array.isArray(res) ? res : [];
+        setSubcategories(list);
+      })
       .catch(() => setSubcategories([]));
   }, []);
 
@@ -178,7 +185,7 @@ const Mattresses = () => {
             </div>
 
             <div className="col-span-2">
-              <p className="text-sm font-semibold text-espresso mb-2">Limit to Categories/Subcategories (optional)</p>
+              <p className="text-sm font-semibold text-espresso mb-2">Limit to Bed Categories/Subcategories (optional)</p>
               <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
                 {categories.map((cat) => {
                   const checked = (editing.categories || []).includes(cat.id);
@@ -216,6 +223,26 @@ const Mattresses = () => {
                     </label>
                   );
                 })}
+                {subcategories
+                  .filter((sub) => (editing.categories?.length ? editing.categories.includes(sub.category) : true))
+                  .map((sub) => {
+                    const checked = (editing.subcategories || []).includes(sub.id);
+                    return (
+                      <label key={`sub-${sub.id}`} className="flex items-center gap-2 text-sm pl-4">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(e) => {
+                            const next = new Set(editing.subcategories || []);
+                            if (e.target.checked) next.add(sub.id);
+                            else next.delete(sub.id);
+                            setEditing({ ...editing, subcategories: Array.from(next) });
+                          }}
+                        />
+                        {sub.name}
+                      </label>
+                    );
+                  })}
                 {categories.length === 0 && (
                   <p className="text-xs text-muted-foreground col-span-2">No categories found.</p>
                 )}
