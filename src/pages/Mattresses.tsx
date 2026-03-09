@@ -164,7 +164,7 @@ const Mattresses = () => {
                 checked={Boolean(editing.enable_bunk_positions)}
                 onChange={(e) => setEditing({ ...editing, enable_bunk_positions: e.target.checked })}
               />
-              Enable bunk positions (Top/Bottom/Both)
+              Enable bunk positions (Top / Bottom)
             </label>
             <label className="text-sm font-medium text-espresso">
               Bunk price top
@@ -185,18 +185,6 @@ const Mattresses = () => {
                 value={editing.price_bottom ?? ""}
                 onChange={(e) =>
                   setEditing({ ...editing, price_bottom: e.target.value === "" ? null : Number(e.target.value) })
-                }
-              />
-            </label>
-            <label className="text-sm font-medium text-espresso">
-              Bunk price both
-              <input
-                type="number"
-                step="0.01"
-                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-                value={editing.price_both ?? ""}
-                onChange={(e) =>
-                  setEditing({ ...editing, price_both: e.target.value === "" ? null : Number(e.target.value) })
                 }
               />
             </label>
@@ -247,18 +235,6 @@ const Mattresses = () => {
                     onChange={(e) => {
                       const next = [...activeSizes];
                       next[idx] = { ...next[idx], original_price: e.target.value === "" ? null : Number(e.target.value) };
-                      setEditing({ ...editing, prices: next });
-                    }}
-                  />
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="Both"
-                    className="col-span-1 rounded-md border px-2 py-1 text-sm"
-                    value={row.price_both ?? ""}
-                    onChange={(e) => {
-                      const next = [...activeSizes];
-                      next[idx] = { ...next[idx], price_both: e.target.value === "" ? null : Number(e.target.value) };
                       setEditing({ ...editing, prices: next });
                     }}
                   />

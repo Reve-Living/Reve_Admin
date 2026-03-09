@@ -2092,10 +2092,10 @@ const ProductForm = () => {
                           checked={Boolean(watch(`mattresses.${index}.enable_bunk_positions`))}
                           onChange={(e) => setValue(`mattresses.${index}.enable_bunk_positions`, e.target.checked)}
                         />
-                        Allow bunk selection (Top / Bottom / Both) for this mattress; “Both” charges 2× price.
+                        Allow bunk selection (Top / Bottom) for this mattress.
                       </label>
                       {watch(`mattresses.${index}.enable_bunk_positions`) && (
-                        <div className="col-span-2 grid grid-cols-3 gap-2">
+                        <div className="col-span-2 grid grid-cols-2 gap-2">
                           <Input
                             type="number"
                             step="0.01"
@@ -2111,14 +2111,6 @@ const ProductForm = () => {
                               setValueAs: (val) => (val === '' || val === null || val === undefined ? null : Number(val)),
                             })}
                             placeholder="Bottom price (£)"
-                          />
-                          <Input
-                            type="number"
-                            step="0.01"
-                            {...register(`mattresses.${index}.price_both` as const, {
-                              setValueAs: (val) => (val === '' || val === null || val === undefined ? null : Number(val)),
-                            })}
-                            placeholder="Both price (£)"
                           />
                         </div>
                       )}
