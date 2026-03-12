@@ -131,33 +131,33 @@ const Orders = () => {
                     <div className="mt-3 flex flex-wrap gap-3">
                       {selectedOrder.reference_images!.map((rawUrl, idx) => {
                         const url = rawUrl || '';
-                        const isData = url.startsWith('data:');
-                        const handleOpen = () => {
+                        const openImage = () => {
                           try {
-                            const win = window.open(url, '_blank', 'noopener,noreferrer');
+                            const base64 = url.replace(/^data:[^;]+;base64,/, '');
+                            const mimeMatch = url.match(/^data:([^;]+);/);
+                            const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+                            const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+                            const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
+                            const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
                             if (win) win.opener = null;
+                            setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
                           } catch {
-                            // ignore; browser will block if invalid
+                            // Fallback: attempt direct navigation
+                            window.open(url, '_blank', 'noopener,noreferrer');
                           }
                         };
                         return (
                           <div
                             key={idx}
-                            className="group relative h-24 w-24 cursor-pointer overflow-hidden rounded-md border border-muted/60 bg-muted"
-                            onClick={handleOpen}
+                            className="group relative block h-24 w-24 overflow-hidden rounded-md border border-muted/60 bg-muted cursor-pointer"
                             title="Open image in new tab"
+                            onClick={openImage}
                           >
                             <img
-                              src={isData ? url : url}
+                              src={url}
                               alt={`Reference ${idx + 1}`}
                               className="h-full w-full object-cover transition group-hover:scale-105"
                               loading="lazy"
-                            />
-                            <button
-                              type="button"
-                              onClick={handleOpen}
-                              className="absolute inset-0 focus:outline-none"
-                              aria-label={`Open reference image ${idx + 1}`}
                             />
                           </div>
                         );
