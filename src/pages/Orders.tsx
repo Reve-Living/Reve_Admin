@@ -115,6 +115,41 @@ const Orders = () => {
               </div>
             </div>
 
+            {(selectedOrder.special_notes || (selectedOrder.reference_images || []).length > 0) && (
+              <div className="grid gap-4 md:grid-cols-2">
+                {selectedOrder.special_notes && (
+                  <div className="rounded-md border bg-white p-4">
+                    <p className="text-sm font-medium text-espresso">Customer Notes</p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+                      {selectedOrder.special_notes}
+                    </p>
+                  </div>
+                )}
+                {(selectedOrder.reference_images || []).length > 0 && (
+                  <div className="rounded-md border bg-white p-4">
+                    <p className="text-sm font-medium text-espresso">Reference Images</p>
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      {selectedOrder.reference_images!.map((url, idx) => (
+                        <a
+                          key={idx}
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block h-20 w-20 overflow-hidden rounded-md border border-muted/60"
+                        >
+                          <img
+                            src={url}
+                            alt={`Reference ${idx + 1}`}
+                            className="h-full w-full object-cover"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <p className="text-sm font-medium text-espresso">Items</p>
               <div className="mt-2 space-y-2">

@@ -216,6 +216,8 @@ export interface Order {
   status: string;
   payment_method: string;
   payment_id?: string;
+   special_notes?: string;
+   reference_images?: string[];
   created_at: string;
   items: OrderItem[];
 }
