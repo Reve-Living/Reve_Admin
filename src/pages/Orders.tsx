@@ -129,21 +129,39 @@ const Orders = () => {
                   <div className="rounded-md border bg-white p-4">
                     <p className="text-sm font-medium text-espresso">Reference Images</p>
                     <div className="mt-3 flex flex-wrap gap-3">
-                      {selectedOrder.reference_images!.map((url, idx) => (
-                        <a
-                          key={idx}
-                          href={url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block h-20 w-20 overflow-hidden rounded-md border border-muted/60"
-                        >
-                          <img
-                            src={url}
-                            alt={`Reference ${idx + 1}`}
-                            className="h-full w-full object-cover"
-                          />
-                        </a>
-                      ))}
+                      {selectedOrder.reference_images!.map((rawUrl, idx) => {
+                        const url = rawUrl || '';
+                        const isData = url.startsWith('data:');
+                        const handleOpen = () => {
+                          try {
+                            const win = window.open(url, '_blank', 'noopener,noreferrer');
+                            if (win) win.opener = null;
+                          } catch {
+                            // ignore; browser will block if invalid
+                          }
+                        };
+                        return (
+                          <div
+                            key={idx}
+                            className="group relative h-24 w-24 cursor-pointer overflow-hidden rounded-md border border-muted/60 bg-muted"
+                            onClick={handleOpen}
+                            title="Open image in new tab"
+                          >
+                            <img
+                              src={isData ? url : url}
+                              alt={`Reference ${idx + 1}`}
+                              className="h-full w-full object-cover transition group-hover:scale-105"
+                              loading="lazy"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleOpen}
+                              className="absolute inset-0 focus:outline-none"
+                              aria-label={`Open reference image ${idx + 1}`}
+                            />
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
