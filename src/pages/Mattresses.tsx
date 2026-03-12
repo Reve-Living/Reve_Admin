@@ -76,8 +76,14 @@ const Mattresses = () => {
     payload.subcategories = (editing.subcategories || []).filter(Boolean);
     try {
       if (editing.id) {
-        await apiPatch(`/mattress-options/${editing.id}/`, payload);
-        toast.success("Mattress updated");
+        try {
+          await apiPatch(`/mattress-options/${editing.id}/`, payload);
+          toast.success("Mattress updated");
+        } catch (err) {
+          // If the record no longer exists (e.g., stale ID), fall back to create.
+          await apiPost("/mattress-options/", payload);
+          toast.success("Mattress saved");
+        }
       } else {
         await apiPost("/mattress-options/", payload);
         toast.success("Mattress created");
@@ -185,71 +191,69 @@ const Mattresses = () => {
             </div>
 
             <div className="col-span-2">
-              <p className="text-sm font-semibold text-espresso mb-2">Limit to Bed Categories/Subcategories (optional)</p>
-              <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
-                {categories.map((cat) => {
-                  const checked = (editing.categories || []).includes(cat.id);
-                  return (
-                    <label key={cat.id} className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) => {
-                          const next = new Set(editing.categories || []);
-                          if (e.target.checked) next.add(cat.id);
-                          else next.delete(cat.id);
-                          setEditing({ ...editing, categories: Array.from(next) });
-                        }}
-                      />
-                      {cat.name}
-                    </label>
-                  );
-                })}
-                {subcategories.map((sub) => {
-                  const checked = (editing.subcategories || []).includes(sub.id);
-                  return (
-                    <label key={`sub-${sub.id}`} className="flex items-center gap-2 text-sm pl-4">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) => {
-                          const next = new Set(editing.subcategories || []);
-                          if (e.target.checked) next.add(sub.id);
-                          else next.delete(sub.id);
-                          setEditing({ ...editing, subcategories: Array.from(next) });
-                        }}
-                      />
-                      {sub.name}
-                    </label>
-                  );
-                })}
-                {subcategories
-                  .filter((sub) => (editing.categories?.length ? editing.categories.includes(sub.category) : true))
-                  .map((sub) => {
-                    const checked = (editing.subcategories || []).includes(sub.id);
+              <div className="rounded-lg border bg-white shadow-sm p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-espresso">Limit to Bed Categories/Subcategories (optional)</p>
+                  <button
+                    type="button"
+                    className="text-xs text-primary hover:underline"
+                    onClick={() => setEditing({ ...editing, categories: [], subcategories: [] })}
+                  >
+                    Clear
+                  </button>
+                </div>
+                <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+                  {categories.map((cat) => {
+                    const checked = (editing.categories || []).includes(cat.id);
+                    const subs = subcategories.filter((s) => s.category === cat.id);
                     return (
-                      <label key={`sub-${sub.id}`} className="flex items-center gap-2 text-sm pl-4">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            const next = new Set(editing.subcategories || []);
-                            if (e.target.checked) next.add(sub.id);
-                            else next.delete(sub.id);
-                            setEditing({ ...editing, subcategories: Array.from(next) });
-                          }}
-                        />
-                        {sub.name}
-                      </label>
+                      <div key={cat.id} className="rounded-md border border-border/60 bg-ivory/60 p-2 space-y-1">
+                        <label className="flex items-center gap-2 text-sm font-medium text-espresso">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              const next = new Set(editing.categories || []);
+                              if (e.target.checked) next.add(cat.id);
+                              else next.delete(cat.id);
+                              setEditing({ ...editing, categories: Array.from(next) });
+                            }}
+                          />
+                          {cat.name}
+                        </label>
+                        {subs.length > 0 && (
+                          <div className="grid grid-cols-1 gap-1 pl-6">
+                            {subs.map((sub) => {
+                              const subChecked = (editing.subcategories || []).includes(sub.id);
+                              return (
+                                <label key={sub.id} className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <input
+                                    type="checkbox"
+                                    checked={subChecked}
+                                    onChange={(e) => {
+                                      const next = new Set(editing.subcategories || []);
+                                      if (e.target.checked) next.add(sub.id);
+                                      else next.delete(sub.id);
+                                      setEditing({ ...editing, subcategories: Array.from(next) });
+                                    }}
+                                  />
+                                  {sub.name}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
-                {categories.length === 0 && (
-                  <p className="text-xs text-muted-foreground col-span-2">No categories found.</p>
-                )}
+                  {categories.length === 0 && (
+                    <p className="text-xs text-muted-foreground">No categories found.</p>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to show this mattress for all products; otherwise it only appears for the selected categories/subcategories.
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Leave empty to show this mattress for all products; otherwise it only appears for the selected categories/subcategories.
-              </p>
             </div>
             <label className="text-sm font-medium text-espresso">
               Base price
