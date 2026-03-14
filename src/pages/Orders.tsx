@@ -7,6 +7,32 @@ import { apiGet, apiPost } from '../lib/api';
 import type { Order, Product } from '../lib/types';
 import { toast } from 'sonner';
 
+const STYLE_OPTION_KEY_RE = /^(\d+)-(\d+)$/;
+
+const resolveVariantValue = (product: Product | undefined, rawValue: string) => {
+  const value = (rawValue || '').trim();
+  if (!value) return value;
+
+  const match = STYLE_OPTION_KEY_RE.exec(value);
+  if (!match || !product?.styles?.length) return value;
+
+  const styleId = Number(match[1]);
+  const optionIndex = Number(match[2]);
+  const styleGroup = product.styles.find((style) => Number(style.id) === styleId);
+  if (!styleGroup || !Array.isArray(styleGroup.options)) return value;
+
+  const option = styleGroup.options[optionIndex];
+  if (!option || typeof option === 'string') return value;
+
+  return option.label || value;
+};
+
+const getResolvedVariantEntries = (product: Product | undefined, selectedVariants?: Record<string, string>) => {
+  return Object.entries(selectedVariants || {})
+    .map(([key, value]) => [key, resolveVariantValue(product, String(value))] as const)
+    .filter(([, value]) => Boolean(value));
+};
+
 const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -175,6 +201,7 @@ const Orders = () => {
                   const product = productCache[item.product];
                   const productColors = product?.colors?.map((c) => c.name).filter(Boolean) || [];
                   const productFabrics = product?.fabrics?.map((f) => f.name).filter(Boolean) || [];
+                  const resolvedVariants = getResolvedVariantEntries(product, item.selected_variants);
                   const extras = Number(item.extras_total || 0);
                   return (
                     <div key={item.id} className="space-y-2 rounded-md border bg-white p-3 text-sm">
@@ -214,6 +241,13 @@ const Orders = () => {
                                {item.mattress_name || item.selected_variants?.Mattress}
                              </div>
                            )}
+                           {resolvedVariants
+                             .filter(([key]) => key.toLowerCase() !== 'mattress')
+                             .map(([key, value]) => (
+                               <div key={key}>
+                                 <span className="font-semibold">{key}:</span> {value}
+                               </div>
+                             ))}
                          </div>
                        )}
                     </div>
