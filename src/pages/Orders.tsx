@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Button } from '../components/ui/button';
-import { Eye, Truck, CheckCircle, Download } from 'lucide-react';
+import { Eye, CheckCircle, Download } from 'lucide-react';
 import { apiDownload, apiGet, apiPost } from '../lib/api';
 import type { Order, Product } from '../lib/types';
 import { toast } from 'sonner';
@@ -31,6 +31,11 @@ const getResolvedVariantEntries = (product: Product | undefined, selectedVariant
   return Object.entries(selectedVariants || {})
     .map(([key, value]) => [key, resolveVariantValue(product, String(value))] as const)
     .filter(([, value]) => Boolean(value));
+};
+
+const getStatusLabel = (status: string) => {
+  if (status === 'shipped') return 'delivered';
+  return status;
 };
 
 const Orders = () => {
@@ -86,7 +91,7 @@ const Orders = () => {
     }
   };
 
-  const updateStatus = async (id: number, action: 'mark_paid' | 'mark_shipped' | 'mark_delivered') => {
+  const updateStatus = async (id: number, action: 'mark_paid' | 'mark_delivered') => {
     try {
       await apiPost(`/orders/${id}/${action}/`, {});
       toast.success('Order updated');
@@ -166,7 +171,7 @@ const Orders = () => {
                   Payment: {selectedOrder.payment_method}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Status: {selectedOrder.status}
+                  Status: {getStatusLabel(selectedOrder.status)}
                 </p>
                 <p className="mt-2 text-sm font-semibold text-espresso">
                   Total: £{Number(selectedOrder.total_amount).toFixed(2)}
@@ -323,7 +328,7 @@ const Orders = () => {
                   <TableCell>£{Number(order.total_amount).toFixed(2)}</TableCell>
                   <TableCell>
                     <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
-                      {order.status}
+                      {getStatusLabel(order.status)}
                     </span>
                   </TableCell>
                   <TableCell className="text-right space-x-2">
@@ -338,8 +343,8 @@ const Orders = () => {
                     <Button variant="outline" size="sm" onClick={() => updateStatus(order.id, 'mark_paid')}>
                       <CheckCircle className="h-4 w-4 mr-2" /> Paid
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => updateStatus(order.id, 'mark_shipped')}>
-                      <Truck className="h-4 w-4 mr-2" /> Shipped
+                    <Button variant="outline" size="sm" onClick={() => updateStatus(order.id, 'mark_delivered')}>
+                      <CheckCircle className="h-4 w-4 mr-2" /> Delivered
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => downloadDeliveryPdf(order.id)}>
                       <Download className="h-4 w-4 mr-2" /> PDF

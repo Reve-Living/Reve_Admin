@@ -31,6 +31,18 @@ const emptyForm: HeroSlideForm = {
   sort_order: 0,
 };
 
+const normalizeSlidesResponse = (payload: unknown): HeroSlide[] => {
+  if (Array.isArray(payload)) return payload;
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    Array.isArray((payload as { results?: HeroSlide[] }).results)
+  ) {
+    return (payload as { results: HeroSlide[] }).results;
+  }
+  return [];
+};
+
 const HeroSlides = () => {
   const [slides, setSlides] = useState<HeroSlide[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -42,16 +54,19 @@ const HeroSlides = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   const sortedSlides = useMemo(
-    () => [...slides].sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || (b.updated_at || '').localeCompare(a.updated_at || '')),
+    () =>
+      [...slides].sort(
+        (a, b) => (a.sort_order || 0) - (b.sort_order || 0) || (b.updated_at || '').localeCompare(a.updated_at || '')
+      ),
     [slides]
   );
 
   const loadSlides = async () => {
     setIsLoading(true);
     try {
-      const data = await apiGet<HeroSlide[]>('/hero-slides/');
-      setSlides(data);
-    } catch (error) {
+      const data = await apiGet<HeroSlide[] | { results?: HeroSlide[] }>('/hero-slides/');
+      setSlides(normalizeSlidesResponse(data));
+    } catch {
       setSlides([]);
       toast.error('Failed to load hero slides');
     } finally {
@@ -82,7 +97,6 @@ const HeroSlides = () => {
       try {
         const data = await apiGet<SubCategory[]>(`/subcategories/?category=${form.category}`);
         setSubcategories(data);
-        // If the current subcategory isn't in this list, clear it
         if (form.subcategory && !data.find((s) => s.id === form.subcategory)) {
           setForm((prev) => ({ ...prev, subcategory: null }));
         }
@@ -92,7 +106,7 @@ const HeroSlides = () => {
       }
     };
     loadSubs();
-  }, [form.category]);
+  }, [form.category, form.subcategory]);
 
   const handleUpload = async (file: File) => {
     setIsUploading(true);
@@ -150,7 +164,7 @@ const HeroSlides = () => {
       }
       resetForm();
       await loadSlides();
-    } catch (error) {
+    } catch {
       toast.error('Failed to save hero slide');
     } finally {
       setIsSaving(false);
@@ -220,6 +234,77 @@ const HeroSlides = () => {
           </Button>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Existing slides</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading slides...</p>
+          ) : sortedSlides.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No hero slides yet. Create your first one below.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Title</TableHead>
+                  <TableHead>CTA</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Subcategory</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Updated</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedSlides.map((slide) => (
+                  <TableRow key={slide.id ?? slide.title}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-3">
+                        {slide.image && <img src={slide.image} alt="" className="h-12 w-16 rounded object-cover" />}
+                        <div>
+                          <div>{slide.title}</div>
+                          {slide.subtitle && <div className="text-xs text-muted-foreground">{slide.subtitle}</div>}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm font-medium">{slide.cta_text || 'Shop Now'}</div>
+                      <div className="text-xs text-muted-foreground">{slide.cta_link}</div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{slide.category_name || '-'}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{slide.subcategory_name || '-'}</TableCell>
+                    <TableCell>
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs ${
+                          slide.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        {slide.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {slide.updated_at ? new Date(slide.updated_at).toLocaleString() : '-'}
+                    </TableCell>
+                    <TableCell className="space-x-2 text-right">
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(slide)}>
+                        Edit
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleToggleActive(slide)}>
+                        {slide.is_active ? 'Deactivate' : 'Activate'}
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(slide.id)}>
+                        Delete
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -353,81 +438,6 @@ const HeroSlides = () => {
               </div>
             )}
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Existing slides</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading slides...</p>
-          ) : sortedSlides.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hero slides yet. Create your first one above.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-              <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>CTA</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Subcategory</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Updated</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-              <TableBody>
-                {sortedSlides.map((slide) => (
-                  <TableRow key={slide.id ?? slide.title}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-3">
-                        {slide.image && <img src={slide.image} alt="" className="h-12 w-16 rounded object-cover" />}
-                        <div>
-                          <div>{slide.title}</div>
-                          {slide.subtitle && <div className="text-xs text-muted-foreground">{slide.subtitle}</div>}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm font-medium">{slide.cta_text || 'Shop Now'}</div>
-                      <div className="text-xs text-muted-foreground">{slide.cta_link}</div>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {slide.category_name || '—'}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {slide.subcategory_name || '—'}
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs ${
-                          slide.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {slide.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {slide.updated_at ? new Date(slide.updated_at).toLocaleString() : '—'}
-                    </TableCell>
-                    <TableCell className="space-x-2 text-right">
-                      <Button variant="ghost" size="sm" onClick={() => handleEdit(slide)}>
-                        Edit
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleToggleActive(slide)}>
-                        {slide.is_active ? 'Deactivate' : 'Activate'}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(slide.id)}>
-                        Delete
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
         </CardContent>
       </Card>
     </div>
