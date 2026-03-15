@@ -224,6 +224,9 @@ const HeroSlides = () => {
         <div>
           <h1 className="text-2xl font-semibold text-espresso">Hero Slider</h1>
           <p className="text-sm text-muted-foreground">Control the homepage hero slides per category.</p>
+          <p className="text-xs text-muted-foreground">
+            If no hero slides are saved here, the storefront shows featured products as a fallback hero.
+          </p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={resetForm}>
@@ -243,7 +246,11 @@ const HeroSlides = () => {
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Loading slides...</p>
           ) : sortedSlides.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No hero slides yet. Create your first one below.</p>
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <p>No saved hero slides found in the database yet.</p>
+              <p>The homepage can still show a hero banner from featured products when this list is empty.</p>
+              <p>Create your first dedicated hero slide below.</p>
+            </div>
           ) : (
             <Table>
               <TableHeader>
