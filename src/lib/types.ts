@@ -4,6 +4,10 @@ export interface Category {
   slug: string;
   description: string;
   image: string;
+  image_alt_text?: string;
+  meta_title?: string;
+  meta_description?: string;
+  sort_order?: number;
   subcategories?: SubCategory[];
 }
 
@@ -14,6 +18,9 @@ export interface SubCategory {
   slug: string;
   description: string;
   image: string;
+  image_alt_text?: string;
+  meta_title?: string;
+  meta_description?: string;
 }
 
 export interface Collection {
@@ -49,6 +56,7 @@ export interface ProductImage {
   id?: number;
   url: string;
   color_name?: string;
+  alt_text?: string;
 }
 
 export interface ProductVideo {
@@ -142,6 +150,8 @@ export interface Product {
   id: number;
   name: string;
   slug: string;
+  meta_title?: string;
+  meta_description?: string;
   category: number;
   // Some endpoints return the category/subcategory slugs instead of IDs; keep both for filtering.
   category_slug?: string;
@@ -208,9 +218,11 @@ export interface Order {
   last_name: string;
   email: string;
   phone: string;
+  alternative_phone?: string;
   address: string;
   city: string;
   postal_code: string;
+  floor_number?: string;
   total_amount: number;
   delivery_charges: number;
   status: string;

@@ -79,6 +79,9 @@ const COMMON_COLORS = [
 const createProductSchema = (requireImages: boolean) =>
   z.object({
     name: z.string().min(1, 'Title is required'),
+    slug: z.string().optional(),
+    meta_title: z.string().optional(),
+    meta_description: z.string().optional(),
     short_description: z.string().min(1, 'Short description is required'),
     description: z.string().min(1, 'Long description is required'),
     category: z.number().min(1, 'Category is required'),
@@ -96,6 +99,7 @@ const createProductSchema = (requireImages: boolean) =>
         z.object({
           url: z.string().optional().nullable(),
           color_name: z.string().optional().nullable(),
+          alt_text: z.string().optional().nullable(),
         })
       )
       .optional(),
@@ -319,6 +323,9 @@ const ProductForm = () => {
     resolver: zodResolver(productSchema),
     defaultValues: {
       short_description: '',
+      slug: '',
+      meta_title: '',
+      meta_description: '',
       images: [],
       videos: [],
       colors: [],
@@ -616,7 +623,10 @@ const ProductForm = () => {
         setValue('is_new', product.is_new);
         setValue('show_size_icons', product.show_size_icons !== false);
         setValue('sort_order', Number.isFinite(Number(product.sort_order)) ? Number(product.sort_order) : 0);
-        const images = product.images.map((i) => ({ url: i.url, color_name: i.color_name || '' }));
+        setValue('slug', product.slug || '');
+        setValue('meta_title', product.meta_title || '');
+        setValue('meta_description', product.meta_description || '');
+        const images = product.images.map((i) => ({ url: i.url, color_name: i.color_name || '', alt_text: i.alt_text || '' }));
         const videos = product.videos.map((v) => ({ url: v.url }));
         const colors = product.colors.map((c) => ({
           name: c.name,
@@ -1062,7 +1072,7 @@ const ProductForm = () => {
     setIsUploading(true);
     try {
       const uploaded = await Promise.all(files.map((file) => apiUpload('/uploads/', file)));
-      uploaded.forEach((res) => appendImage({ url: res.url }));
+      uploaded.forEach((res) => appendImage({ url: res.url, alt_text: '' }));
       toast.success(`${uploaded.length} image${uploaded.length > 1 ? 's' : ''} uploaded`);
     } catch {
       toast.error('Some images failed to upload');
@@ -1103,6 +1113,9 @@ const ProductForm = () => {
       const computedOriginalPrice = Number.isFinite(computedOriginalPriceRaw) ? computedOriginalPriceRaw : null;
       const payload: ProductFormValues = {
         ...data,
+        slug: (data.slug || '').trim(),
+        meta_title: (data.meta_title || '').trim(),
+        meta_description: (data.meta_description || '').trim(),
         category: Number(data.category),
         subcategory: Number.isFinite(Number(data.subcategory)) && Number(data.subcategory) > 0
           ? Number(data.subcategory)
@@ -1121,6 +1134,7 @@ const ProductForm = () => {
           .map((img) => ({
             url: (img.url || '').trim(),
             color_name: (img.color_name || '').trim(),
+            alt_text: (img.alt_text || '').trim(),
           }))
           .filter((img) => img.url.length > 0),
         videos: (data.videos || []).filter((vid) => (vid.url || '').trim().length > 0),
@@ -1361,11 +1375,31 @@ const ProductForm = () => {
             <CardTitle>Basic Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-2">
-              <label className="text-sm font-medium">Product Title *</label>
-              <Input {...register('name')} placeholder="e.g. Cambridge Divan Bed" />
-              {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-            </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Product Title *</label>
+                <Input {...register('name')} placeholder="e.g. Cambridge Divan Bed" />
+                {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">URL Slug</label>
+                <Input {...register('slug')} placeholder="e.g. cambridge-divan-bed" />
+                <p className="text-[11px] text-muted-foreground">Leave blank to auto-generate from the product title.</p>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Meta Title</label>
+                <Input {...register('meta_title')} placeholder="Optional SEO title" />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Meta Description</label>
+                <textarea
+                  {...register('meta_description')}
+                  className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder="Optional SEO description"
+                />
+              </div>
             
             <div className="grid gap-2">
               <label className="text-sm font-medium">Short Description *</label>
@@ -1519,7 +1553,7 @@ const ProductForm = () => {
                 }}
                 className="inline-flex w-64 cursor-pointer bg-black/5"
               />
-              <Button type="button" variant="outline" size="sm" onClick={() => appendImage({ url: '' })}>
+              <Button type="button" variant="outline" size="sm" onClick={() => appendImage({ url: '', alt_text: '' })}>
                 <Plus className="h-4 w-4 mr-2" /> Add Image
               </Button>
               <Button type="button" variant="outline" size="sm" onClick={() => appendVideo({ url: '' })}>
@@ -1558,6 +1592,14 @@ const ProductForm = () => {
                   {watch(`images.${index}.url`) && (
                     <img src={watch(`images.${index}.url`) || undefined} alt={`Preview ${index + 1}`} className="w-32 h-32 object-cover rounded-md border" />
                   )}
+                  <div className="grid gap-1">
+                    <label className="text-xs text-muted-foreground">Image ALT text</label>
+                    <Input
+                      value={watch(`images.${index}.alt_text`) || ''}
+                      onChange={(e) => setValue(`images.${index}.alt_text`, e.target.value)}
+                      placeholder="Describe this image for SEO/accessibility"
+                    />
+                  </div>
                   <div className="grid gap-1">
                     <label className="text-xs text-muted-foreground">Optional: bind to color</label>
                     <select

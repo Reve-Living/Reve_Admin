@@ -27,10 +27,19 @@ const Categories = () => {
   const [isSavingFilter, setIsSavingFilter] = useState(false);
 
   const [categoryName, setCategoryName] = useState('');
+  const [categorySlug, setCategorySlug] = useState('');
+  const [categoryMetaTitle, setCategoryMetaTitle] = useState('');
+  const [categoryMetaDescription, setCategoryMetaDescription] = useState('');
+  const [categoryImageAltText, setCategoryImageAltText] = useState('');
+  const [categorySortOrder, setCategorySortOrder] = useState(0);
   const [subCategoryFormData, setSubCategoryFormData] = useState({
     name: '',
+    slug: '',
     description: '',
     imageUrl: '',
+    imageAltText: '',
+    metaTitle: '',
+    metaDescription: '',
     selectedProducts: [] as number[],
   });
   const [filterForm, setFilterForm] = useState({
@@ -64,8 +73,11 @@ const Categories = () => {
           ...c,
           subcategories: [...(c.subcategories || [])].sort((a, b) => a.name.localeCompare(b.name)),
         }))
-        // Show newest categories first so fresh entries appear at the top of the admin list
-        .sort((a, b) => (b.id ?? 0) - (a.id ?? 0));
+        .sort(
+          (a, b) =>
+            (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) ||
+            a.name.localeCompare(b.name)
+        );
 
       setCategories(sortedCategories);
       setProducts(productsRes);
@@ -104,9 +116,19 @@ const Categories = () => {
     if (category) {
       setEditingCategory(category);
       setCategoryName(category.name);
+      setCategorySlug(category.slug || '');
+      setCategoryMetaTitle(category.meta_title || '');
+      setCategoryMetaDescription(category.meta_description || '');
+      setCategoryImageAltText(category.image_alt_text || '');
+      setCategorySortOrder(Number(category.sort_order) || 0);
     } else {
       setEditingCategory(null);
       setCategoryName('');
+      setCategorySlug('');
+      setCategoryMetaTitle('');
+      setCategoryMetaDescription('');
+      setCategoryImageAltText('');
+      setCategorySortOrder(0);
     }
     setShowCategoryModal(true);
   };
@@ -117,15 +139,28 @@ const Categories = () => {
       setEditingSubCategory(subCategory);
       setSubCategoryFormData({
         name: subCategory.name,
+        slug: subCategory.slug || '',
         description: subCategory.description,
         imageUrl: subCategory.image,
+        imageAltText: subCategory.image_alt_text || '',
+        metaTitle: subCategory.meta_title || '',
+        metaDescription: subCategory.meta_description || '',
         selectedProducts: products
           .filter((p) => p.subcategory === subCategory.id)
           .map((p) => p.id),
       });
     } else {
       setEditingSubCategory(null);
-      setSubCategoryFormData({ name: '', description: '', imageUrl: '', selectedProducts: [] });
+      setSubCategoryFormData({
+        name: '',
+        slug: '',
+        description: '',
+        imageUrl: '',
+        imageAltText: '',
+        metaTitle: '',
+        metaDescription: '',
+        selectedProducts: [],
+      });
     }
     setShowSubCategoryModal(true);
   };
@@ -302,18 +337,32 @@ const Categories = () => {
       if (editingCategory) {
         await apiPut(`/categories/${editingCategory.id}/`, {
           ...editingCategory,
-          name: categoryName,
+          name: categoryName.trim(),
+          slug: categorySlug.trim() || slugify(categoryName),
+          meta_title: categoryMetaTitle.trim(),
+          meta_description: categoryMetaDescription.trim(),
+          image_alt_text: categoryImageAltText.trim(),
+          sort_order: Number.isFinite(categorySortOrder) ? categorySortOrder : 0,
         });
         toast.success('Category updated successfully');
       } else {
         await apiPost('/categories/', {
-          name: categoryName,
-          slug: categoryName.toLowerCase().replace(/\s+/g, '-'),
+          name: categoryName.trim(),
+          slug: categorySlug.trim() || slugify(categoryName),
+          meta_title: categoryMetaTitle.trim(),
+          meta_description: categoryMetaDescription.trim(),
+          image_alt_text: categoryImageAltText.trim(),
+          sort_order: Number.isFinite(categorySortOrder) ? categorySortOrder : 0,
         });
         toast.success('Category created successfully');
       }
       setShowCategoryModal(false);
       setCategoryName('');
+      setCategorySlug('');
+      setCategoryMetaTitle('');
+      setCategoryMetaDescription('');
+      setCategoryImageAltText('');
+      setCategorySortOrder(0);
       await loadData();
     } catch {
       toast.error('Failed to save category');
@@ -330,18 +379,25 @@ const Categories = () => {
       if (editingSubCategory) {
         await apiPut(`/subcategories/${editingSubCategory.id}/`, {
           ...editingSubCategory,
-          name: subCategoryFormData.name,
+          name: subCategoryFormData.name.trim(),
+          slug: subCategoryFormData.slug.trim() || slugify(subCategoryFormData.name),
           description: subCategoryFormData.description,
           image: subCategoryFormData.imageUrl,
+          image_alt_text: subCategoryFormData.imageAltText.trim(),
+          meta_title: subCategoryFormData.metaTitle.trim(),
+          meta_description: subCategoryFormData.metaDescription.trim(),
           category: selectedCategoryId,
         });
         toast.success('Subcategory updated successfully');
       } else {
         const created = await apiPost<SubCategory>('/subcategories/', {
-          name: subCategoryFormData.name,
-          slug: subCategoryFormData.name.toLowerCase().replace(/\s+/g, '-'),
+          name: subCategoryFormData.name.trim(),
+          slug: subCategoryFormData.slug.trim() || slugify(subCategoryFormData.name),
           description: subCategoryFormData.description,
           image: subCategoryFormData.imageUrl,
+          image_alt_text: subCategoryFormData.imageAltText.trim(),
+          meta_title: subCategoryFormData.metaTitle.trim(),
+          meta_description: subCategoryFormData.metaDescription.trim(),
           category: selectedCategoryId,
         });
         targetSubId = created.id;
@@ -579,6 +635,9 @@ const Categories = () => {
                   </button>
                   <div>
                     <CardTitle className="text-xl">{category.name}</CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      Display order: {Number(category.sort_order) || 0}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -744,6 +803,57 @@ const Categories = () => {
                   placeholder="e.g. Divan Beds"
                   autoFocus
                 />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">URL Slug</label>
+                <Input
+                  value={categorySlug}
+                  onChange={(e) => setCategorySlug(e.target.value)}
+                  placeholder="e.g. divan-beds"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Meta Title</label>
+                <Input
+                  value={categoryMetaTitle}
+                  onChange={(e) => setCategoryMetaTitle(e.target.value)}
+                  placeholder="Optional SEO title"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Meta Description</label>
+                <textarea
+                  value={categoryMetaDescription}
+                  onChange={(e) => setCategoryMetaDescription(e.target.value)}
+                  rows={4}
+                  placeholder="Optional SEO description"
+                  className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Image ALT Text</label>
+                <Input
+                  value={categoryImageAltText}
+                  onChange={(e) => setCategoryImageAltText(e.target.value)}
+                  placeholder="Describe the category image for SEO/accessibility"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Display Order</label>
+                <Input
+                  type="number"
+                  value={categorySortOrder}
+                  onChange={(e) => setCategorySortOrder(Number(e.target.value))}
+                  placeholder="0"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Lower numbers appear first. Higher numbers appear later.
+                </p>
               </div>
 
               <div className="flex justify-end gap-2 pt-4">
@@ -977,6 +1087,15 @@ const Categories = () => {
               </div>
 
               <div className="grid gap-2">
+                <label className="text-sm font-medium">URL Slug</label>
+                <Input
+                  value={subCategoryFormData.slug}
+                  onChange={(e) => setSubCategoryFormData({ ...subCategoryFormData, slug: e.target.value })}
+                  placeholder="e.g. ottoman-divans"
+                />
+              </div>
+
+              <div className="grid gap-2">
                 <label className="text-sm font-medium">Subcategory Image</label>
                 <Input
                   type="file"
@@ -1005,6 +1124,35 @@ const Categories = () => {
                     </Button>
                   </div>
                 )}
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Image ALT Text</label>
+                <Input
+                  value={subCategoryFormData.imageAltText}
+                  onChange={(e) => setSubCategoryFormData({ ...subCategoryFormData, imageAltText: e.target.value })}
+                  placeholder="Describe the subcategory image"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Meta Title</label>
+                <Input
+                  value={subCategoryFormData.metaTitle}
+                  onChange={(e) => setSubCategoryFormData({ ...subCategoryFormData, metaTitle: e.target.value })}
+                  placeholder="Optional SEO title"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Meta Description</label>
+                <textarea
+                  value={subCategoryFormData.metaDescription}
+                  onChange={(e) => setSubCategoryFormData({ ...subCategoryFormData, metaDescription: e.target.value })}
+                  rows={4}
+                  placeholder="Optional SEO description"
+                  className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
               </div>
 
               <div className="grid gap-2">

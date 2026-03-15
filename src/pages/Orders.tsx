@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Button } from '../components/ui/button';
-import { Eye, Truck, CheckCircle } from 'lucide-react';
-import { apiGet, apiPost } from '../lib/api';
+import { Eye, Truck, CheckCircle, Download } from 'lucide-react';
+import { apiDownload, apiGet, apiPost } from '../lib/api';
 import type { Order, Product } from '../lib/types';
 import { toast } from 'sonner';
 
@@ -96,6 +96,23 @@ const Orders = () => {
     }
   };
 
+  const downloadDeliveryPdf = async (id: number) => {
+    try {
+      const blob = await apiDownload(`/orders/${id}/delivery_note_pdf/`);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `order-${id}-delivery-note.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('PDF downloaded');
+    } catch {
+      toast.error('Failed to download PDF');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -118,6 +135,12 @@ const Orders = () => {
               </Button>
             </div>
 
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => downloadDeliveryPdf(selectedOrder.id)}>
+                <Download className="mr-2 h-4 w-4" /> Download PDF
+              </Button>
+            </div>
+
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-md border bg-white p-4">
                 <p className="text-sm font-medium text-espresso">Shipping Address</p>
@@ -126,6 +149,16 @@ const Orders = () => {
                   {selectedOrder.city} {selectedOrder.postal_code}
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">{selectedOrder.phone}</p>
+                {selectedOrder.alternative_phone && (
+                  <p className="text-sm text-muted-foreground">
+                    Alt: {selectedOrder.alternative_phone}
+                  </p>
+                )}
+                {selectedOrder.floor_number && (
+                  <p className="text-sm text-muted-foreground">
+                    Floor: {selectedOrder.floor_number}
+                  </p>
+                )}
               </div>
               <div className="rounded-md border bg-white p-4">
                 <p className="text-sm font-medium text-espresso">Order Summary</p>
@@ -307,6 +340,9 @@ const Orders = () => {
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => updateStatus(order.id, 'mark_shipped')}>
                       <Truck className="h-4 w-4 mr-2" /> Shipped
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => downloadDeliveryPdf(order.id)}>
+                      <Download className="h-4 w-4 mr-2" /> PDF
                     </Button>
                   </TableCell>
                 </TableRow>

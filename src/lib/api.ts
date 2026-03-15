@@ -103,3 +103,13 @@ export const apiUpload = async (path: string, file: File): Promise<{ url: string
 
   return { url };
 };
+
+export const apiDownload = async (path: string): Promise<Blob> => {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    headers: buildHeaders(false),
+  });
+  if (!res.ok) {
+    throw new Error(await res.text());
+  }
+  return res.blob();
+};
