@@ -77,8 +77,7 @@ const COMMON_COLORS = [
   { name: 'Gold', hex: '#D97706' },
 ];
 
-const createProductSchema = (requireImages: boolean) =>
-  z.object({
+const productSchema = z.object({
     name: z.string().min(1, 'Title is required'),
     slug: z.string().optional(),
     meta_title: z.string().optional(),
@@ -217,20 +216,9 @@ const createProductSchema = (requireImages: boolean) =>
         })
       )
       .optional(),
-  })
-  .superRefine((values, ctx) => {
-    if (!requireImages) return;
-    const images = (values.images || []).filter((img) => (img.url || '').trim().length > 0);
-    if (images.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['images'],
-        message: 'At least one picture is required',
-      });
-    }
   });
 
-type ProductFormValues = z.infer<ReturnType<typeof createProductSchema>>;
+type ProductFormValues = z.infer<typeof productSchema>;
 
 type StyleOptionInput = { label: string; description: string; icon_url?: string; price_delta?: number; size?: string; sizes?: string[] };
 type StyleLibraryItem = {
@@ -306,7 +294,6 @@ const ProductForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const isEditing = Boolean(id);
-  const productSchema = createProductSchema(!isEditing);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<SubCategory[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -1540,7 +1527,7 @@ const ProductForm = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Media (Images & Videos) *</CardTitle>
+            <CardTitle>Media (Images & Videos)</CardTitle>
             <div className="space-x-2">
               <Input
                 type="file"
@@ -1564,7 +1551,7 @@ const ProductForm = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Product Images *</label>
+              <label className="text-sm font-medium">Product Images (Optional)</label>
               {imageFields.map((field, index) => {
                 const swatchColors = (watch('colors') || []).map((c) => c.name).filter(Boolean);
                 const fabricColors = (watch('fabrics') || [])
