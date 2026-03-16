@@ -4,45 +4,45 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Button } from '../components/ui/button';
 import { Eye, CheckCircle, Download } from 'lucide-react';
 import { apiDownload, apiGet, apiPost } from '../lib/api';
-import type { Order, Product } from '../lib/types';
+import type { Order } from '../lib/types';
 import { toast } from 'sonner';
-
-const STYLE_OPTION_KEY_RE = /^(\d+)-(\d+)$/;
-
-const resolveVariantValue = (product: Product | undefined, rawValue: string) => {
-  const value = (rawValue || '').trim();
-  if (!value) return value;
-
-  const match = STYLE_OPTION_KEY_RE.exec(value);
-  if (!match || !product?.styles?.length) return value;
-
-  const styleId = Number(match[1]);
-  const optionIndex = Number(match[2]);
-  const styleGroup = product.styles.find((style) => Number(style.id) === styleId);
-  if (!styleGroup || !Array.isArray(styleGroup.options)) return value;
-
-  const option = styleGroup.options[optionIndex];
-  if (!option || typeof option === 'string') return value;
-
-  return option.label || value;
-};
-
-const getResolvedVariantEntries = (product: Product | undefined, selectedVariants?: Record<string, string>) => {
-  return Object.entries(selectedVariants || {})
-    .map(([key, value]) => [key, resolveVariantValue(product, String(value))] as const)
-    .filter(([, value]) => Boolean(value));
-};
 
 const getStatusLabel = (status: string) => {
   if (status === 'shipped') return 'delivered';
   return status;
 };
 
+const getCleanItemSummary = (item: Order['items'][number]) => {
+  const parts: string[] = [];
+  const seen = new Set<string>();
+
+  const addPart = (value?: string) => {
+    const cleaned = (value || '').trim();
+    if (!cleaned) return;
+    if (cleaned.toLowerCase().includes('dimension')) return;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    parts.push(cleaned);
+  };
+
+  if (item.size) addPart(`Size: ${item.size}`);
+  if (item.color) addPart(`Colour: ${item.color}`);
+
+  (item.style || '')
+    .split('|')
+    .map((part) => part.trim())
+    .forEach((part) => addPart(part));
+
+  if (item.mattress_name) addPart(`Mattress: ${item.mattress_name}`);
+
+  return parts;
+};
+
 const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
-  const [productCache, setProductCache] = useState<Record<number, Product>>({});
 
   const loadOrders = async () => {
     try {
@@ -62,27 +62,6 @@ const Orders = () => {
     try {
       const order = await apiGet<Order>(`/orders/${id}/`);
       setSelectedOrder(order);
-      const uniqueProductIds = Array.from(new Set((order.items || []).map((i) => i.product)));
-      const missingIds = uniqueProductIds.filter((pid) => !productCache[pid]);
-      if (missingIds.length > 0) {
-        const fetched = await Promise.all(
-          missingIds.map(async (pid) => {
-            try {
-              const product = await apiGet<Product>(`/products/${pid}/`);
-              return [pid, product] as const;
-            } catch {
-              return [pid, null] as const;
-            }
-          })
-        );
-        setProductCache((prev) => {
-          const next = { ...prev };
-          fetched.forEach(([pid, product]) => {
-            if (product) next[pid] = product;
-          });
-          return next;
-        });
-      }
     } catch {
       toast.error('Failed to load order details');
       setSelectedOrder(null);
@@ -155,14 +134,10 @@ const Orders = () => {
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">{selectedOrder.phone}</p>
                 {selectedOrder.alternative_phone && (
-                  <p className="text-sm text-muted-foreground">
-                    Alt: {selectedOrder.alternative_phone}
-                  </p>
+                  <p className="text-sm text-muted-foreground">Alt: {selectedOrder.alternative_phone}</p>
                 )}
                 {selectedOrder.floor_number && (
-                  <p className="text-sm text-muted-foreground">
-                    Floor: {selectedOrder.floor_number}
-                  </p>
+                  <p className="text-sm text-muted-foreground">Floor: {selectedOrder.floor_number}</p>
                 )}
               </div>
               <div className="rounded-md border bg-white p-4">
@@ -206,14 +181,14 @@ const Orders = () => {
                             if (win) win.opener = null;
                             setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
                           } catch {
-                            // Fallback: attempt direct navigation
                             window.open(url, '_blank', 'noopener,noreferrer');
                           }
                         };
+
                         return (
                           <div
                             key={idx}
-                            className="group relative block h-24 w-24 overflow-hidden rounded-md border border-muted/60 bg-muted cursor-pointer"
+                            className="group relative block h-24 w-24 cursor-pointer overflow-hidden rounded-md border border-muted/60 bg-muted"
                             title="Open image in new tab"
                             onClick={openImage}
                           >
@@ -236,11 +211,9 @@ const Orders = () => {
               <p className="text-sm font-medium text-espresso">Items</p>
               <div className="mt-2 space-y-2">
                 {(selectedOrder.items || []).map((item) => {
-                  const product = productCache[item.product];
-                  const productColors = product?.colors?.map((c) => c.name).filter(Boolean) || [];
-                  const productFabrics = product?.fabrics?.map((f) => f.name).filter(Boolean) || [];
-                  const resolvedVariants = getResolvedVariantEntries(product, item.selected_variants);
                   const extras = Number(item.extras_total || 0);
+                  const summaryParts = getCleanItemSummary(item);
+
                   return (
                     <div key={item.id} className="space-y-2 rounded-md border bg-white p-3 text-sm">
                       <div className="flex items-start justify-between gap-3">
@@ -248,46 +221,16 @@ const Orders = () => {
                           <p className="font-medium text-espresso">{item.product_name || `Product #${item.product}`}</p>
                           <p className="text-xs text-muted-foreground">
                             Qty {item.quantity}
-                            {item.size ? ` • Size ${item.size}` : ''}
-                            {item.color ? ` • Colour ${item.color}` : ''}
-                             {item.mattress_name && ` • Mattress ${item.mattress_name}`}
+                            {summaryParts.length > 0 ? ` • ${summaryParts.join(' • ')}` : ''}
                           </p>
                           {extras > 0 && (
                             <p className="text-xs text-amber-700">Extras: £{extras.toFixed(2)}</p>
                           )}
                         </div>
-                        <div className="font-semibold text-espresso whitespace-nowrap">
+                        <div className="whitespace-nowrap font-semibold text-espresso">
                           £{Number(item.price).toFixed(2)}
                         </div>
                       </div>
-
-                       {product && (
-                         <div className="grid gap-2 rounded border border-muted/40 bg-muted/10 p-2 text-xs text-espresso">
-                           {productColors.length > 0 && (
-                             <div>
-                               <span className="font-semibold">Colors:</span> {productColors.join(', ')}
-                             </div>
-                           )}
-                           {productFabrics.length > 0 && (
-                             <div>
-                               <span className="font-semibold">Fabrics:</span> {productFabrics.join(', ')}
-                             </div>
-                           )}
-                           {(item.mattress_name || item.selected_variants?.Mattress) && (
-                             <div>
-                               <span className="font-semibold">Mattress:</span>{' '}
-                               {item.mattress_name || item.selected_variants?.Mattress}
-                             </div>
-                           )}
-                           {resolvedVariants
-                             .filter(([key]) => key.toLowerCase() !== 'mattress')
-                             .map(([key, value]) => (
-                               <div key={key}>
-                                 <span className="font-semibold">{key}:</span> {value}
-                               </div>
-                             ))}
-                         </div>
-                       )}
                     </div>
                   );
                 })}
@@ -318,8 +261,10 @@ const Orders = () => {
                 <TableRow key={order.id}>
                   <TableCell className="font-medium">ORD-{order.id}</TableCell>
                   <TableCell>
-                    <div className="font-medium">{order.first_name} {order.last_name}</div>
-                    <div className="text-xs text-muted-foreground truncate max-w-[200px]">{order.address}</div>
+                    <div className="font-medium">
+                      {order.first_name} {order.last_name}
+                    </div>
+                    <div className="max-w-[200px] truncate text-xs text-muted-foreground">{order.address}</div>
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">{order.email}</div>
@@ -327,27 +272,27 @@ const Orders = () => {
                   </TableCell>
                   <TableCell>£{Number(order.total_amount).toFixed(2)}</TableCell>
                   <TableCell>
-                    <span className="px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                    <span className="rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-800">
                       {getStatusLabel(order.status)}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right space-x-2">
+                  <TableCell className="space-x-2 text-right">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => viewOrder(order.id)}
                       disabled={isLoadingDetail && selectedOrder?.id === order.id}
                     >
-                      <Eye className="h-4 w-4 mr-2" /> View
+                      <Eye className="mr-2 h-4 w-4" /> View
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => updateStatus(order.id, 'mark_paid')}>
-                      <CheckCircle className="h-4 w-4 mr-2" /> Paid
+                      <CheckCircle className="mr-2 h-4 w-4" /> Paid
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => updateStatus(order.id, 'mark_delivered')}>
-                      <CheckCircle className="h-4 w-4 mr-2" /> Delivered
+                      <CheckCircle className="mr-2 h-4 w-4" /> Delivered
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => downloadDeliveryPdf(order.id)}>
-                      <Download className="h-4 w-4 mr-2" /> PDF
+                      <Download className="mr-2 h-4 w-4" /> PDF
                     </Button>
                   </TableCell>
                 </TableRow>
