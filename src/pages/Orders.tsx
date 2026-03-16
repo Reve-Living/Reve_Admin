@@ -12,6 +12,16 @@ const getStatusLabel = (status: string) => {
   return status;
 };
 
+const isDisplayableOrderPart = (value?: string) => {
+  const cleaned = (value || '').trim();
+  if (!cleaned) return false;
+  const lower = cleaned.toLowerCase();
+  if (lower.includes('dimension')) return false;
+  if (/(^|\b)(length|width|height|headboard height|bed height)\s*:/.test(lower)) return false;
+  if (/(cm|inch|inches|\")/.test(lower) && /(length|width|height)/.test(lower)) return false;
+  return true;
+};
+
 const getCleanItemSummary = (item: Order['items'][number]) => {
   const parts: string[] = [];
   const seen = new Set<string>();
@@ -19,7 +29,7 @@ const getCleanItemSummary = (item: Order['items'][number]) => {
   const addPart = (value?: string) => {
     const cleaned = (value || '').trim();
     if (!cleaned) return;
-    if (cleaned.toLowerCase().includes('dimension')) return;
+    if (!isDisplayableOrderPart(cleaned)) return;
     const key = cleaned.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
