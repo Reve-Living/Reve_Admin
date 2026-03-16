@@ -22,6 +22,24 @@ const isDisplayableOrderPart = (value?: string) => {
   return true;
 };
 
+const getOrderPartRank = (value?: string) => {
+  const lower = (value || '').trim().toLowerCase();
+  if (lower.startsWith('size:')) return 1;
+  if (lower.startsWith('colour:') || lower.startsWith('color:')) return 2;
+  if (lower.startsWith('fabric:')) return 3;
+  if (lower.includes('storage')) return 4;
+  if (lower.includes('headboard')) return 5;
+  if (lower.startsWith('mattress')) return 6;
+  return 99;
+};
+
+const sortOrderParts = (parts: string[]) =>
+  [...parts].sort((a, b) => {
+    const rankDiff = getOrderPartRank(a) - getOrderPartRank(b);
+    if (rankDiff !== 0) return rankDiff;
+    return a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
+  });
+
 const getCleanItemSummary = (item: Order['items'][number]) => {
   const parts: string[] = [];
   const seen = new Set<string>();
@@ -46,7 +64,7 @@ const getCleanItemSummary = (item: Order['items'][number]) => {
 
   if (item.mattress_name) addPart(`Mattress: ${item.mattress_name}`);
 
-  return parts;
+  return sortOrderParts(parts);
 };
 
 const Orders = () => {
