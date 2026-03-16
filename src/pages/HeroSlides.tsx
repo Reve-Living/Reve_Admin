@@ -5,6 +5,7 @@ import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut, apiUpload } from '../lib/api';
 import type { Category, SubCategory, HeroSlide } from '../lib/types';
+import { IMAGE_UPLOAD_ACCEPT, WEBP_UPLOAD_HINT } from '../lib/upload';
 import { toast } from 'sonner';
 
 type HeroSlideForm = {
@@ -431,11 +432,12 @@ const HeroSlides = () => {
               <div className="flex items-center gap-3">
                 <input
                   type="file"
-                  accept="image/*"
+                  accept={IMAGE_UPLOAD_ACCEPT}
                   onChange={onFileInputChange}
                   disabled={isUploading}
                   className="text-sm"
                 />
+                <span className="text-xs text-muted-foreground">{WEBP_UPLOAD_HINT}</span>
                 {isUploading && <span className="text-xs text-muted-foreground">Uploading...</span>}
               </div>
             </div>

@@ -5,6 +5,7 @@ import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { apiDelete, apiGet, apiPost, apiPut, apiUpload } from '../lib/api';
 import type { Collection, Product } from '../lib/types';
+import { IMAGE_UPLOAD_ACCEPT, WEBP_UPLOAD_HINT } from '../lib/upload';
 import { toast } from 'sonner';
 
 type CollectionForm = {
@@ -179,7 +180,7 @@ const Collections = () => {
             <label className="text-sm font-medium">Collection Image *</label>
             <Input
               type="file"
-              accept="image/*"
+              accept={IMAGE_UPLOAD_ACCEPT}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
@@ -187,6 +188,7 @@ const Collections = () => {
                 }
               }}
             />
+            <p className="text-xs text-muted-foreground">{WEBP_UPLOAD_HINT}</p>
             {isUploading && <p className="text-xs text-muted-foreground">Uploading...</p>}
             {form.image && (
               <img

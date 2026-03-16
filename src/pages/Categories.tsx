@@ -6,6 +6,7 @@ import { Edit, Trash2, Plus, X, ChevronDown, ChevronRight, FolderPlus, Filter } 
 import { toast } from 'sonner';
 import { apiDelete, apiGet, apiPost, apiPut, apiUpload, apiPatch } from '../lib/api';
 import type { Category, Product, SubCategory, FilterType, CategoryFilter, FilterOption } from '../lib/types';
+import { IMAGE_UPLOAD_ACCEPT, WEBP_UPLOAD_HINT } from '../lib/upload';
 const Categories = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -1099,10 +1100,11 @@ const Categories = () => {
                 <label className="text-sm font-medium">Subcategory Image</label>
                 <Input
                   type="file"
-                  accept="image/*"
+                  accept={IMAGE_UPLOAD_ACCEPT}
                   onChange={(e) => handleUploadImage(e.target.files?.[0])}
                   className="cursor-pointer bg-black/5"
                 />
+                <p className="text-xs text-muted-foreground">{WEBP_UPLOAD_HINT}</p>
                 {isUploading && (
                   <p className="text-xs text-muted-foreground">Uploading...</p>
                 )}

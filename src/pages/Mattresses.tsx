@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "../lib/api";
+import { IMAGE_UPLOAD_ACCEPT, WEBP_UPLOAD_HINT } from "../lib/upload";
 import type { MattressOptionPrice, ProductMattress, Category as ApiCategory, SubCategory as ApiSubCategory } from "../lib/types";
 import { toast } from "sonner";
 
@@ -173,7 +174,7 @@ const Mattresses = () => {
               <div className="flex gap-2">
                 <input
                   type="file"
-                  accept="image/*"
+                  accept={IMAGE_UPLOAD_ACCEPT}
                   className="w-full rounded-md border px-3 py-2 text-sm"
                   onChange={async (e) => {
                     const file = e.target.files?.[0];
@@ -187,6 +188,7 @@ const Mattresses = () => {
                     }
                   }}
                 />
+                <p className="text-xs text-muted-foreground">{WEBP_UPLOAD_HINT}</p>
               </div>
             </div>
 

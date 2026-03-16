@@ -11,6 +11,7 @@ import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import type { FieldErrors } from 'react-hook-form';
 import { apiGet, apiPost, apiPut, apiUpload } from '../lib/api';
 import type { Category, Product, ProductDimensionRow, SubCategory, FilterType, FilterOption } from '../lib/types';
+import { ICON_UPLOAD_ACCEPT, IMAGE_UPLOAD_ACCEPT, WEBP_UPLOAD_HINT } from '../lib/upload';
 
 const DIMENSION_SIZE_COLUMNS = [
   '2ft6 Small Single',
@@ -1543,7 +1544,7 @@ const ProductForm = () => {
             <div className="space-x-2">
               <Input
                 type="file"
-                accept="image/*"
+                accept={IMAGE_UPLOAD_ACCEPT}
                 multiple
                 onChange={(e) => {
                   if (e.target.files && e.target.files.length > 0) {
@@ -1574,7 +1575,7 @@ const ProductForm = () => {
                   <div className="flex gap-2">
                     <Input 
                       type="file"
-                      accept="image/*"
+                      accept={IMAGE_UPLOAD_ACCEPT}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
@@ -1867,7 +1868,7 @@ const ProductForm = () => {
                     </div>
                     <input
                       type="file"
-                      accept="image/*"
+                      accept={IMAGE_UPLOAD_ACCEPT}
                       className="hidden"
                       ref={(el) => {
                         if (el) colorFileInputRefs.current[index] = el;
@@ -2013,7 +2014,7 @@ const ProductForm = () => {
                           <div className="flex flex-col gap-2 md:flex-row">
                             <Input
                               type="file"
-                              accept="image/*"
+                              accept={IMAGE_UPLOAD_ACCEPT}
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
                                 if (file) {
@@ -2119,7 +2120,7 @@ const ProductForm = () => {
                       />
                       <Input
                         type="file"
-                        accept="image/*"
+                        accept={IMAGE_UPLOAD_ACCEPT}
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
@@ -2201,7 +2202,7 @@ const ProductForm = () => {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium">Group Icon URL (SVG/PNG)</label>
+                  <label className="text-sm font-medium">Group Icon URL (SVG/PNG/WebP)</label>
                   <div className="flex gap-2">
                     <Input {...register(`styles.${index}.icon_url` as const)} placeholder="URL or inline SVG markup" />
                     <Button
@@ -2211,7 +2212,7 @@ const ProductForm = () => {
                       onClick={async () => {
                         const fileInput = document.createElement('input');
                         fileInput.type = 'file';
-                        fileInput.accept = 'image/svg+xml,image/png,image/*';
+                        fileInput.accept = ICON_UPLOAD_ACCEPT;
                         fileInput.onchange = async () => {
                           const file = fileInput.files?.[0];
                           if (!file) return;
@@ -2223,6 +2224,7 @@ const ProductForm = () => {
                       Upload
                     </Button>
                   </div>
+                  <p className="text-xs text-muted-foreground">{WEBP_UPLOAD_HINT}</p>
                 </div>
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between">
@@ -2324,7 +2326,7 @@ const ProductForm = () => {
                           onClick={async () => {
                             const fileInput = document.createElement('input');
                             fileInput.type = 'file';
-                            fileInput.accept = 'image/svg+xml,image/png,image/*';
+                            fileInput.accept = ICON_UPLOAD_ACCEPT;
                             fileInput.onchange = async () => {
                               const file = fileInput.files?.[0];
                               if (!file) return;
@@ -2556,7 +2558,7 @@ const ProductForm = () => {
                     <div className="col-span-2 flex items-center gap-2">
                       <Input
                         type="file"
-                        accept="image/*"
+                        accept={IMAGE_UPLOAD_ACCEPT}
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (file) {
