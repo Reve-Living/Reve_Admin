@@ -1371,8 +1371,8 @@ const ProductForm = () => {
 
               <div className="grid gap-2">
                 <label className="text-sm font-medium">URL Slug</label>
-                <Input {...register('slug')} placeholder="e.g. cambridge-divan-bed" />
-                <p className="text-[11px] text-muted-foreground">Leave blank to auto-generate from the product title.</p>
+                <Input {...register('slug')} maxLength={255} placeholder="e.g. cambridge-divan-bed" />
+                <p className="text-[11px] text-muted-foreground">Leave blank to auto-generate from the product title. Max 255 characters.</p>
               </div>
 
               <div className="grid gap-2">
