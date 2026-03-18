@@ -1,68 +1,126 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { apiGet, apiPut } from '../lib/api';
-import type { Collection } from '../lib/types';
+import type { Category, SubCategory } from '../lib/types';
 import { toast } from 'sonner';
 
-const Collections = () => {
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [updatingIds, setUpdatingIds] = useState<number[]>([]);
+type CollectionItem = {
+  id: number;
+  name: string;
+  description: string;
+  image: string;
+  sort_order?: number;
+  show_in_collections?: boolean;
+  itemType: 'category' | 'subcategory';
+  parentName?: string;
+};
 
-  const loadCollections = async () => {
+const Collections = () => {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [subcategories, setSubcategories] = useState<SubCategory[]>([]);
+  const [updatingKeys, setUpdatingKeys] = useState<string[]>([]);
+
+  const loadData = async () => {
     try {
-      const data = await apiGet<Collection[]>('/collections/');
-      setCollections(data);
+      const [categoriesData, subcategoriesData] = await Promise.all([
+        apiGet<Category[]>('/categories/'),
+        apiGet<SubCategory[]>('/subcategories/'),
+      ]);
+      setCategories(categoriesData);
+      setSubcategories(subcategoriesData);
     } catch {
-      setCollections([]);
-      toast.error('Failed to load collections');
+      setCategories([]);
+      setSubcategories([]);
+      toast.error('Failed to load existing categories');
     }
   };
 
   useEffect(() => {
-    loadCollections();
+    loadData();
   }, []);
 
-  const handleFeaturedToggle = async (collection: Collection, checked: boolean) => {
-    setUpdatingIds((prev) => [...prev, collection.id]);
+  const items = useMemo<CollectionItem[]>(() => {
+    const categoryMap = new Map(categories.map((category) => [category.id, category.name]));
+
+    const categoryItems: CollectionItem[] = categories.map((category) => ({
+      id: category.id,
+      name: category.name,
+      description: category.description || '',
+      image: category.image || '',
+      sort_order: category.sort_order,
+      show_in_collections: category.show_in_collections,
+      itemType: 'category',
+    }));
+
+    const subcategoryItems: CollectionItem[] = subcategories.map((subcategory) => ({
+      id: subcategory.id,
+      name: subcategory.name,
+      description: subcategory.description || '',
+      image: subcategory.image || '',
+      sort_order: subcategory.sort_order,
+      show_in_collections: subcategory.show_in_collections,
+      itemType: 'subcategory',
+      parentName: categoryMap.get(subcategory.category) || '',
+    }));
+
+    return [...subcategoryItems, ...categoryItems].sort((a, b) => {
+      const orderDiff = (a.sort_order ?? 0) - (b.sort_order ?? 0);
+      if (orderDiff !== 0) return orderDiff;
+      return a.name.localeCompare(b.name);
+    });
+  }, [categories, subcategories]);
+
+  const selectedCount = items.filter((item) => item.show_in_collections).length;
+
+  const handleToggle = async (item: CollectionItem, checked: boolean) => {
+    const key = `${item.itemType}-${item.id}`;
+    setUpdatingKeys((prev) => [...prev, key]);
+
     try {
-      await apiPut(`/collections/${collection.id}/`, {
-        name: collection.name,
-        description: collection.description || '',
-        image: collection.image || '',
-        is_featured: checked,
-        sort_order: collection.sort_order ?? 0,
-        products: collection.products || [],
-      });
-      toast.success(
-        checked ? 'Collection added to homepage top 4' : 'Collection removed from homepage top 4'
-      );
-      await loadCollections();
+      if (item.itemType === 'category') {
+        const category = categories.find((entry) => entry.id === item.id);
+        if (!category) throw new Error('Category not found');
+
+        await apiPut(`/categories/${item.id}/`, {
+          ...category,
+          show_in_collections: checked,
+        });
+      } else {
+        const subcategory = subcategories.find((entry) => entry.id === item.id);
+        if (!subcategory) throw new Error('Subcategory not found');
+
+        await apiPut(`/subcategories/${item.id}/`, {
+          ...subcategory,
+          show_in_collections: checked,
+        });
+      }
+
+      toast.success(checked ? 'Added to homepage top display' : 'Removed from homepage top display');
+      await loadData();
     } catch {
-      toast.error('Failed to update collection display selection');
+      toast.error('Failed to update display selection');
     } finally {
-      setUpdatingIds((prev) => prev.filter((id) => id !== collection.id));
+      setUpdatingKeys((prev) => prev.filter((entry) => entry !== key));
     }
   };
-
-  const featuredCount = collections.filter((collection) => collection.is_featured).length;
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-serif font-bold text-espresso">Collections</h2>
         <p className="text-muted-foreground">
-          Select which existing collections should appear in the homepage top 4.
+          Choose from the categories and subcategories you already have.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Existing Collections</CardTitle>
+          <CardTitle>Existing Categories</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="mb-4 text-sm text-muted-foreground">
-            Checked collections: {featuredCount}. The site will show only 4 collections on the homepage, and the rest will appear in View All Collections.
+            Selected items: {selectedCount}. Only 4 selected items will be shown on the homepage.
           </p>
 
           <Table>
@@ -70,47 +128,50 @@ const Collections = () => {
               <TableRow>
                 <TableHead>Image</TableHead>
                 <TableHead>Name</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Parent</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Show In Top 4</TableHead>
-                <TableHead>Sort</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {collections.map((collection) => (
-                <TableRow key={collection.id}>
-                  <TableCell>
-                    {collection.image ? (
-                      <img
-                        src={collection.image}
-                        alt={collection.name}
-                        className="h-12 w-16 rounded-md object-cover"
-                      />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">No image</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="font-medium">{collection.name}</TableCell>
-                  <TableCell className="max-w-[320px] truncate">
-                    {collection.description}
-                  </TableCell>
-                  <TableCell>
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(collection.is_featured)}
-                        disabled={updatingIds.includes(collection.id)}
-                        onChange={(e) => handleFeaturedToggle(collection, e.target.checked)}
-                      />
-                      <span>{collection.is_featured ? 'Selected' : 'Not selected'}</span>
-                    </label>
-                  </TableCell>
-                  <TableCell>{collection.sort_order ?? 0}</TableCell>
-                </TableRow>
-              ))}
-              {collections.length === 0 && (
+              {items.map((item) => {
+                const key = `${item.itemType}-${item.id}`;
+                return (
+                  <TableRow key={key}>
+                    <TableCell>
+                      {item.image ? (
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="h-12 w-16 rounded-md object-cover"
+                        />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No image</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell className="capitalize">{item.itemType}</TableCell>
+                    <TableCell>{item.parentName || '-'}</TableCell>
+                    <TableCell className="max-w-[320px] truncate">{item.description}</TableCell>
+                    <TableCell>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(item.show_in_collections)}
+                          disabled={updatingKeys.includes(key)}
+                          onChange={(e) => handleToggle(item, e.target.checked)}
+                        />
+                        <span>{item.show_in_collections ? 'Selected' : 'Not selected'}</span>
+                      </label>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {items.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    No collections found.
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                    No categories found.
                   </TableCell>
                 </TableRow>
               )}
