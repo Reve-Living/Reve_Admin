@@ -29,6 +29,7 @@ export interface Collection {
   slug: string;
   description: string;
   image: string;
+  is_featured?: boolean;
   sort_order: number;
   products?: number[];
 }

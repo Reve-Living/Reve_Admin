@@ -12,6 +12,7 @@ type CollectionForm = {
   name: string;
   description: string;
   image: string;
+  is_featured: boolean;
   sort_order: number;
   products: number[];
 };
@@ -20,6 +21,7 @@ const emptyForm: CollectionForm = {
   name: '',
   description: '',
   image: '',
+  is_featured: false,
   sort_order: 0,
   products: [],
 };
@@ -94,6 +96,7 @@ const Collections = () => {
       name: form.name.trim(),
       description: form.description.trim(),
       image: form.image.trim(),
+      is_featured: form.is_featured,
       sort_order: Number.isFinite(form.sort_order) ? form.sort_order : 0,
       products: form.products,
     };
@@ -120,10 +123,32 @@ const Collections = () => {
       name: collection.name || '',
       description: collection.description || '',
       image: collection.image || '',
+      is_featured: Boolean(collection.is_featured),
       sort_order: collection.sort_order ?? 0,
       products: collection.products || [],
     });
   };
+
+  const handleFeaturedToggle = async (collection: Collection, checked: boolean) => {
+    try {
+      await apiPut(`/collections/${collection.id}/`, {
+        name: collection.name,
+        description: collection.description || '',
+        image: collection.image || '',
+        is_featured: checked,
+        sort_order: collection.sort_order ?? 0,
+        products: collection.products || [],
+      });
+      toast.success(
+        checked ? 'Collection added to top display' : 'Collection removed from top display'
+      );
+      await loadCollections();
+    } catch {
+      toast.error('Failed to update display selection');
+    }
+  };
+
+  const featuredCount = collections.filter((collection) => collection.is_featured).length;
 
   const toggleProduct = (productId: number) => {
     setForm((prev) => ({
@@ -210,6 +235,17 @@ const Collections = () => {
             />
           </div>
 
+          <label className="flex items-center gap-3 rounded-md border bg-muted/20 px-3 py-3 text-sm">
+            <input
+              type="checkbox"
+              checked={form.is_featured}
+              onChange={(e) => setForm((prev) => ({ ...prev, is_featured: e.target.checked }))}
+            />
+            <span>
+              Show this collection in the top display section
+            </span>
+          </label>
+
           <div className="grid gap-2">
             <label className="text-sm font-medium">Products in Collection</label>
             <div className="max-h-48 overflow-y-auto rounded-md border bg-white p-3">
@@ -247,12 +283,16 @@ const Collections = () => {
           <CardTitle>All Collections</CardTitle>
         </CardHeader>
         <CardContent>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Selected for top display: {featuredCount}. The storefront shows the first 4 selected collections by sort order, and users can then view all collections.
+          </p>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Image</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
+                <TableHead>Top Display</TableHead>
                 <TableHead>Sort</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -275,6 +315,16 @@ const Collections = () => {
                   <TableCell className="max-w-[280px] truncate">
                     {collection.description}
                   </TableCell>
+                  <TableCell>
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(collection.is_featured)}
+                        onChange={(e) => handleFeaturedToggle(collection, e.target.checked)}
+                      />
+                      <span>{collection.is_featured ? 'Shown' : 'Hidden'}</span>
+                    </label>
+                  </TableCell>
                   <TableCell>{collection.sort_order}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
@@ -295,7 +345,7 @@ const Collections = () => {
               ))}
               {collections.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     No collections yet.
                   </TableCell>
                 </TableRow>
