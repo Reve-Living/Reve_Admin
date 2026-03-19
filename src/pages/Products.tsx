@@ -5,13 +5,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Edit, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { apiDelete, apiGet } from '../lib/api';
-import type { Product, Category } from '../lib/types';
+import type { Product, Category, SubCategory } from '../lib/types';
 import { toast } from 'sonner';
 
 const Products = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | 'all'>('all');
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | 'all'>('all');
 
   const loadData = async () => {
     try {
@@ -54,31 +55,58 @@ const Products = () => {
     }
   };
 
-  const filteredProducts = useMemo(() => {
-    if (selectedCategory === 'all') return products;
+  const selectedCategoryData = useMemo(
+    () =>
+      categories.find((c) => c.slug === selectedCategory || String(c.id) === selectedCategory) || null,
+    [categories, selectedCategory]
+  );
 
-    const targetCategory = categories.find(
-      (c) => c.slug === selectedCategory || String(c.id) === selectedCategory
+  const availableSubcategories = useMemo<SubCategory[]>(() => {
+    if (selectedCategoryData) return selectedCategoryData.subcategories || [];
+
+    return categories.flatMap((category) => category.subcategories || []);
+  }, [categories, selectedCategoryData]);
+
+  const filteredProducts = useMemo(() => {
+    const targetCategory = selectedCategoryData;
+    const targetSubcategory = availableSubcategories.find(
+      (sub) => sub.slug === selectedSubcategory || String(sub.id) === selectedSubcategory
     );
 
-    const targetSlug = (targetCategory?.slug || '').toLowerCase();
-    const targetId = targetCategory?.id;
-    const targetName = (targetCategory?.name || '').toLowerCase();
+    const targetCategorySlug = (targetCategory?.slug || '').toLowerCase();
+    const targetCategoryId = targetCategory?.id;
+    const targetCategoryName = (targetCategory?.name || '').toLowerCase();
+    const targetSubcategorySlug = (targetSubcategory?.slug || '').toLowerCase();
+    const targetSubcategoryId = targetSubcategory?.id;
+    const targetSubcategoryName = (targetSubcategory?.name || '').toLowerCase();
 
     return products.filter((product) => {
-      const productSlug = (product.category_slug || '').toLowerCase();
+      const productCategorySlug = (product.category_slug || '').toLowerCase();
       const productCategoryId = Number(product.category);
       const productCategoryName = (product.category_name || '').toLowerCase();
+      const productSubcategorySlug = (product.subcategory_slug || '').toLowerCase();
+      const productSubcategoryId = Number(product.subcategory);
+      const productSubcategoryName = (product.subcategory_name || '').toLowerCase();
 
-      const matchesSlug = targetSlug ? productSlug === targetSlug : false;
-      const matchesId = targetId != null && Number.isFinite(productCategoryId)
-        ? productCategoryId === targetId
-        : false;
-      const matchesName = targetName ? productCategoryName === targetName : false;
+      const matchesCategory =
+        selectedCategory === 'all' ||
+        (targetCategorySlug ? productCategorySlug === targetCategorySlug : false) ||
+        (targetCategoryId != null && Number.isFinite(productCategoryId)
+          ? productCategoryId === targetCategoryId
+          : false) ||
+        (targetCategoryName ? productCategoryName === targetCategoryName : false);
 
-      return matchesSlug || matchesId || matchesName;
+      const matchesSubcategory =
+        selectedSubcategory === 'all' ||
+        (targetSubcategorySlug ? productSubcategorySlug === targetSubcategorySlug : false) ||
+        (targetSubcategoryId != null && Number.isFinite(productSubcategoryId)
+          ? productSubcategoryId === targetSubcategoryId
+          : false) ||
+        (targetSubcategoryName ? productSubcategoryName === targetSubcategoryName : false);
+
+      return matchesCategory && matchesSubcategory;
     });
-  }, [products, categories, selectedCategory]);
+  }, [products, selectedCategoryData, availableSubcategories, selectedCategory, selectedSubcategory]);
 
   return (
     <div className="space-y-6">
@@ -102,6 +130,7 @@ const Products = () => {
           onChange={(e) => {
             const val = e.target.value;
             setSelectedCategory(val === '' ? 'all' : val);
+            setSelectedSubcategory('all');
           }}
         >
           <option value="">All categories</option>
@@ -111,8 +140,33 @@ const Products = () => {
             </option>
           ))}
         </select>
-        {selectedCategory !== 'all' && (
-          <Button variant="outline" size="sm" onClick={() => setSelectedCategory('all')}>
+
+        <label className="text-sm font-medium text-muted-foreground">Filter by subcategory</label>
+        <select
+          className="min-w-[220px] rounded-md border border-input bg-white px-3 py-2 text-sm"
+          value={selectedSubcategory === 'all' ? '' : selectedSubcategory}
+          onChange={(e) => {
+            const val = e.target.value;
+            setSelectedSubcategory(val === '' ? 'all' : val);
+          }}
+        >
+          <option value="">All subcategories</option>
+          {availableSubcategories.map((sub) => (
+            <option key={sub.id} value={sub.slug || String(sub.id)}>
+              {sub.name}
+            </option>
+          ))}
+        </select>
+
+        {(selectedCategory !== 'all' || selectedSubcategory !== 'all') && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSelectedCategory('all');
+              setSelectedSubcategory('all');
+            }}
+          >
             Clear
           </Button>
         )}
@@ -167,7 +221,7 @@ const Products = () => {
               {filteredProducts.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
-                    No products found for this category.
+                    No products found for the selected filters.
                   </TableCell>
                 </TableRow>
               )}
