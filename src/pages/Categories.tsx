@@ -7,6 +7,17 @@ import { toast } from 'sonner';
 import { apiDelete, apiGet, apiPost, apiPut, apiUpload, apiPatch } from '../lib/api';
 import type { Category, Product, SubCategory, FilterType, CategoryFilter, FilterOption } from '../lib/types';
 import { IMAGE_UPLOAD_ACCEPT, WEBP_UPLOAD_HINT } from '../lib/upload';
+
+const toSafeSlug = (value: string) =>
+  (value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[\/\\]+/g, '-')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'item';
+
 const Categories = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -178,14 +189,7 @@ const Categories = () => {
     setShowFilterModal(true);
   };
 
-  const slugify = (value: string) =>
-    (value || '')
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'filter';
+  const slugify = (value: string) => toSafeSlug(value);
 
   const ensureUniqueSlug = (base: string) => {
     const existing = new Set(filterTypes.map((ft) => ft.slug));
@@ -236,7 +240,7 @@ const Categories = () => {
       const optionPayloads = quickFilterOptions
         .map((opt, idx) => ({
           name: (opt.name || '').trim(),
-          slug: (opt.name || '').toLowerCase().replace(/\s+/g, '-'),
+          slug: toSafeSlug(opt.name || ''),
           filter_type: created.id,
           display_order: idx,
         }))
@@ -1214,13 +1218,13 @@ const Categories = () => {
                             <Input
                               placeholder="Option name"
                               value={optionEditData.name}
-                              onChange={(e) =>
-                                setOptionEditData({
-                                  ...optionEditData,
-                                  name: e.target.value,
-                                  slug: e.target.value.toLowerCase().replace(/\s+/g, '-'),
-                                })
-                              }
+                                onChange={(e) =>
+                                  setOptionEditData({
+                                    ...optionEditData,
+                                    name: e.target.value,
+                                    slug: toSafeSlug(e.target.value),
+                                  })
+                                }
                             />
                             <Input
                               placeholder="Slug"
@@ -1299,7 +1303,7 @@ const Categories = () => {
                     setOptionFormData({
                       ...optionFormData,
                       name: e.target.value,
-                      slug: e.target.value.toLowerCase().replace(/\s+/g, '-'),
+                      slug: toSafeSlug(e.target.value),
                     })
                   }
                 />

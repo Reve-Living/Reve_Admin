@@ -7,6 +7,16 @@ import { toast } from 'sonner';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../lib/api';
 import type { Category, CategoryFilter, FilterType, SubCategory } from '../lib/types';
 
+const toSafeSlug = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[\/\\]+/g, '-')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+
 const Filters = () => {
   const [filterTypes, setFilterTypes] = useState<FilterType[]>([]);
   const [categoryFilters, setCategoryFilters] = useState<CategoryFilter[]>([]);
@@ -352,7 +362,7 @@ const Filters = () => {
                                   setOptionEditData({
                                     ...optionEditData,
                                     name: e.target.value,
-                                    slug: e.target.value.toLowerCase().replace(/\s+/g, '-'),
+                                    slug: toSafeSlug(e.target.value),
                                   })
                                 }
                               />
@@ -439,7 +449,7 @@ const Filters = () => {
                     setOptionFormData({
                       ...optionFormData,
                       name: e.target.value,
-                      slug: e.target.value.toLowerCase().replace(/\s+/g, '-'),
+                      slug: toSafeSlug(e.target.value),
                     })
                   }
                 />
@@ -670,13 +680,13 @@ const Filters = () => {
                 placeholder="Filter name (e.g., Bed Size)"
                 value={formData.name}
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    name: e.target.value,
-                    slug: e.target.value.toLowerCase().replace(/\s+/g, '-'),
-                  })
-                }
-              />
+                    setFormData({
+                      ...formData,
+                      name: e.target.value,
+                      slug: toSafeSlug(e.target.value),
+                    })
+                  }
+                />
               <Input
                 placeholder="Slug (e.g., bed-size)"
                 value={formData.slug}
