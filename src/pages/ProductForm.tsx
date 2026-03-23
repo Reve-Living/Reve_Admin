@@ -10,8 +10,38 @@ import { useEffect, useRef, useState } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import type { FieldErrors } from 'react-hook-form';
 import { apiGet, apiPost, apiPut, apiUpload } from '../lib/api';
-import type { Category, Product, ProductDimensionRow, SubCategory, FilterType, FilterOption } from '../lib/types';
+import type { Category, Product, ProductDimensionRow, SubCategory, FilterType, FilterOption, CategoryFilter } from '../lib/types';
 import { ICON_UPLOAD_ACCEPT, IMAGE_UPLOAD_ACCEPT, WEBP_UPLOAD_HINT } from '../lib/upload';
+
+const resolveCategoryId = (product: Product, categories: Category[]): number | undefined => {
+  const rawCategory = Number(product.category);
+  if (Number.isFinite(rawCategory) && rawCategory > 0) return rawCategory;
+
+  const bySlug = categories.find((cat) => cat.slug === product.category_slug);
+  if (bySlug) return bySlug.id;
+
+  const byName = categories.find((cat) => cat.name === product.category_name);
+  return byName?.id;
+};
+
+const resolveSubcategoryId = (product: Product, subcategories: SubCategory[], categoryId?: number): number | null => {
+  const rawSubcategory = Number(product.subcategory);
+  if (Number.isFinite(rawSubcategory) && rawSubcategory > 0) return rawSubcategory;
+
+  const bySlug = subcategories.find(
+    (sub) =>
+      sub.slug === product.subcategory_slug &&
+      (!categoryId || Number(sub.category) === Number(categoryId))
+  );
+  if (bySlug) return bySlug.id;
+
+  const byName = subcategories.find(
+    (sub) =>
+      sub.name === product.subcategory_name &&
+      (!categoryId || Number(sub.category) === Number(categoryId))
+  );
+  return byName?.id ?? null;
+};
 
 const DIMENSION_SIZE_COLUMNS = [
   '2ft6 Small Single',
@@ -306,6 +336,8 @@ const ProductForm = () => {
   const [filterOptions, setFilterOptions] = useState<FilterOption[]>([]);
   const [categoryFilterOptions, setCategoryFilterOptions] = useState<FilterOption[]>([]);
   const [dimensionColumns, setDimensionColumns] = useState<string[]>(() => [...DIMENSION_SIZE_COLUMNS]);
+  const [loadedProductCategory, setLoadedProductCategory] = useState<number | null>(null);
+  const [loadedProductSubcategory, setLoadedProductSubcategory] = useState<number | null>(null);
 
   const { register, control, handleSubmit, formState: { errors }, setValue, watch } = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -512,24 +544,28 @@ const ProductForm = () => {
     load();
   }, []);
 
-  // Load filter options tied to the selected category (and optional subcategory)
+  // Load filter options tied only to the selected subcategory.
   useEffect(() => {
     const loadCategoryFilters = async () => {
-      const category = categories.find((c) => c.id === selectedCategory);
-      if (!category) {
+      if (!selectedCategory || !selectedSubcategory) {
         setCategoryFilterOptions([]);
         return;
       }
       try {
-        const query = selectedSubcategory ? `?subcategory=${selectedSubcategory}` : '';
-        const [catRes, typesRes, optsRes] = await Promise.all([
-          apiGet<{ filters: FilterType[] }>(`/categories/${category.slug}/filters/${query}`),
+        const [categoryAssignments, typesRes, optsRes] = await Promise.all([
+          apiGet<CategoryFilter[]>(`/category-filters/?subcategory=${selectedSubcategory}`),
           apiGet<FilterType[]>('/filter-types/'),
           apiGet<FilterOption[]>('/filter-options/'),
         ]);
 
         const activeTypes = (typesRes || []).filter((ft) => ft.is_active !== false);
         const activeTypeIds = new Set(activeTypes.map((ft) => ft.id));
+        const assignedTypeIds = new Set(
+          (categoryAssignments || [])
+            .filter((assignment) => assignment.is_active !== false)
+            .map((assignment) => Number(assignment.filter_type))
+            .filter((id) => Number.isFinite(id) && id > 0)
+        );
 
         setFilterOptions(
           (optsRes || []).filter(
@@ -537,25 +573,17 @@ const ProductForm = () => {
           )
         );
 
-        const filters = Array.isArray(catRes?.filters) ? catRes.filters : [];
-
-        // Only show filters that are explicitly assigned to the selected subcategory.
-        const subId = selectedSubcategory ? Number(selectedSubcategory) : null;
-        // When a subcategory is selected, include both subcategory-specific filters
-        // and category-wide filters so shared filters (e.g., size) still show up.
-        const applicableFilters = subId
-          ? filters.filter(
-              (ft: any) => Number(ft.subcategory) === subId || !ft.subcategory
-            )
-          : filters.filter((ft: any) => !ft.subcategory);
-
-        const opts = applicableFilters.flatMap((ft) =>
-          (ft.options || []).map((opt) => ({
-            ...opt,
-            filter_type: ft.id,
-            filter_type_name: ft.name,
-          }))
-        );
+        const opts = activeTypes
+          .filter((ft) => assignedTypeIds.has(Number(ft.id)))
+          .flatMap((ft) =>
+            (ft.options || [])
+              .filter((opt) => opt.is_active !== false)
+              .map((opt) => ({
+                ...opt,
+                filter_type: ft.id,
+                filter_type_name: ft.name,
+              }))
+          );
         setCategoryFilterOptions(opts);
       } catch (err) {
         console.error('Failed to load category filters', err);
@@ -585,11 +613,15 @@ const ProductForm = () => {
       if (!id) return;
       try {
         const product = await apiGet<Product>(`/products/${id}/`);
+        const resolvedCategoryId = resolveCategoryId(product, categories);
+        const resolvedSubcategoryId = resolveSubcategoryId(product, subcategories, resolvedCategoryId);
+        setLoadedProductCategory(resolvedCategoryId ?? null);
+        setLoadedProductSubcategory(resolvedSubcategoryId ?? null);
         setValue('name', product.name);
         setValue('short_description', product.short_description || (product.description || '').split('. ')[0] || '');
         setValue('description', product.description);
-        setValue('category', product.category);
-        setValue('subcategory', product.subcategory || null);
+        setValue('category', resolvedCategoryId ?? Number(product.category));
+        setValue('subcategory', resolvedSubcategoryId);
         setValue('price', Number(product.price));
 
         // Ensure original_price is numeric to satisfy zod validation when editing
@@ -719,7 +751,17 @@ const ProductForm = () => {
       }
     };
     loadProduct();
-  }, [id, setValue, replaceImages, replaceVideos, replaceColors, replaceSizes, replaceStyles, replaceFabrics, replaceMattresses, replaceFaqs, replaceDimensions, replaceInfoSections, replaceFilterValues]);
+  }, [id, categories, subcategories, setValue, replaceImages, replaceVideos, replaceColors, replaceSizes, replaceStyles, replaceFabrics, replaceMattresses, replaceFaqs, replaceDimensions, replaceInfoSections, replaceFilterValues]);
+
+  useEffect(() => {
+    if (!id) return;
+    if (loadedProductCategory && Number(selectedCategory || 0) !== Number(loadedProductCategory)) {
+      setValue('category', loadedProductCategory);
+    }
+    if (loadedProductSubcategory !== null && Number(selectedSubcategory || 0) !== Number(loadedProductSubcategory)) {
+      setValue('subcategory', loadedProductSubcategory);
+    }
+  }, [id, loadedProductCategory, loadedProductSubcategory, selectedCategory, selectedSubcategory, setValue]);
 
   const handleUpload = async (file: File, onSuccess: (url: string) => void, inlineSvgPreferred = false) => {
     setIsUploading(true);
@@ -1104,10 +1146,13 @@ const ProductForm = () => {
         slug: (data.slug || '').trim(),
         meta_title: (data.meta_title || '').trim(),
         meta_description: (data.meta_description || '').trim(),
-        category: Number(data.category),
+        category:
+          Number.isFinite(Number(data.category)) && Number(data.category) > 0
+            ? Number(data.category)
+            : loadedProductCategory || 0,
         subcategory: Number.isFinite(Number(data.subcategory)) && Number(data.subcategory) > 0
           ? Number(data.subcategory)
-          : null,
+          : loadedProductSubcategory ?? null,
         price: Number.isFinite(data.price) ? data.price : 0,
         delivery_charges: Number.isFinite(data.delivery_charges ?? null)
           ? Number(data.delivery_charges)
@@ -2704,7 +2749,7 @@ const ProductForm = () => {
                 <div>
                   <p className="text-sm font-medium">Filters</p>
                   <p className="text-xs text-muted-foreground">
-                    Optionally assign this product to filter options (e.g., Bed Size: King). All fields are optional.
+                    Optionally assign this product to subcategory filter options. These appear after you choose a subcategory.
                   </p>
                 </div>
                 <Button
@@ -2722,6 +2767,9 @@ const ProductForm = () => {
               </div>
               {categoryFilterOptions.length === 0 && filterOptions.length === 0 && (
                 <p className="text-xs text-muted-foreground">No filter options yet. Create them in the Filters or Categories page.</p>
+              )}
+              {!selectedSubcategory && (
+                <p className="text-xs text-muted-foreground">Select a subcategory to see its available filters.</p>
               )}
               {(() => {
                 const selectedIds = new Set(
