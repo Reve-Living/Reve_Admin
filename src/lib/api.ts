@@ -19,6 +19,7 @@ const buildHeaders = (hasBody: boolean) => {
 export const apiGet = async <T>(path: string): Promise<T> => {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     headers: buildHeaders(false),
+    cache: "no-store",
   });
   if (!res.ok) {
     throw new Error(await res.text());
