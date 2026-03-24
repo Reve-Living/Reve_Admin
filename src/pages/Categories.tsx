@@ -52,6 +52,7 @@ const Categories = () => {
     imageAltText: '',
     metaTitle: '',
     metaDescription: '',
+    sort_order: 0,
     selectedProducts: [] as number[],
   });
   const [filterForm, setFilterForm] = useState({
@@ -83,7 +84,11 @@ const Categories = () => {
       const sortedCategories = [...categoriesRes]
         .map((c) => ({
           ...c,
-          subcategories: [...(c.subcategories || [])].sort((a, b) => a.name.localeCompare(b.name)),
+          subcategories: [...(c.subcategories || [])].sort(
+            (a, b) =>
+              (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) ||
+              a.name.localeCompare(b.name)
+          ),
         }))
         .sort(
           (a, b) =>
@@ -157,6 +162,7 @@ const Categories = () => {
         imageAltText: subCategory.image_alt_text || '',
         metaTitle: subCategory.meta_title || '',
         metaDescription: subCategory.meta_description || '',
+        sort_order: Number(subCategory.sort_order) || 0,
         selectedProducts: products
           .filter((p) => p.subcategory === subCategory.id)
           .map((p) => p.id),
@@ -171,6 +177,7 @@ const Categories = () => {
         imageAltText: '',
         metaTitle: '',
         metaDescription: '',
+        sort_order: 0,
         selectedProducts: [],
       });
     }
@@ -391,6 +398,7 @@ const Categories = () => {
           image_alt_text: subCategoryFormData.imageAltText.trim(),
           meta_title: subCategoryFormData.metaTitle.trim(),
           meta_description: subCategoryFormData.metaDescription.trim(),
+          sort_order: Number.isFinite(subCategoryFormData.sort_order) ? subCategoryFormData.sort_order : 0,
           category: selectedCategoryId,
         });
         toast.success('Subcategory updated successfully');
@@ -403,6 +411,7 @@ const Categories = () => {
           image_alt_text: subCategoryFormData.imageAltText.trim(),
           meta_title: subCategoryFormData.metaTitle.trim(),
           meta_description: subCategoryFormData.metaDescription.trim(),
+          sort_order: Number.isFinite(subCategoryFormData.sort_order) ? subCategoryFormData.sort_order : 0,
           category: selectedCategoryId,
         });
         targetSubId = created.id;
@@ -748,6 +757,9 @@ const Categories = () => {
                           )}
                           <div className="flex-1">
                             <div className="font-medium text-lg">{sub.name}</div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Display order: {Number(sub.sort_order) || 0}
+                            </p>
                             <p
                               className="text-sm text-muted-foreground mt-1"
                               dangerouslySetInnerHTML={{ __html: renderRichText(sub.description) }}
@@ -1097,6 +1109,21 @@ const Categories = () => {
                   value={subCategoryFormData.slug}
                   onChange={(e) => setSubCategoryFormData({ ...subCategoryFormData, slug: e.target.value })}
                   placeholder="e.g. ottoman-divans"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Display Order</label>
+                <Input
+                  type="number"
+                  value={subCategoryFormData.sort_order}
+                  onChange={(e) =>
+                    setSubCategoryFormData({
+                      ...subCategoryFormData,
+                      sort_order: Number(e.target.value),
+                    })
+                  }
+                  placeholder="0"
                 />
               </div>
 
