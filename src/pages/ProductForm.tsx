@@ -1512,9 +1512,9 @@ const ProductForm = () => {
                       return Number.isNaN(n) ? 0 : n;
                     },
                   })}
-                  placeholder="0 (lower shows first)"
+                  placeholder="1 = first, 2 = second, 0 = unsorted"
                 />
-                <p className="text-[11px] text-muted-foreground">Lower numbers appear first in listings.</p>
+                <p className="text-[11px] text-muted-foreground">Use 1 for first position. Leave 0 to place the product after manually ordered items.</p>
               </div>
             </div>
 
