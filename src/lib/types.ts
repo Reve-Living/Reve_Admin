@@ -56,6 +56,25 @@ export interface HeroSlide {
   updated_at?: string;
 }
 
+export interface Promotion {
+  id?: number;
+  name: string;
+  code: string;
+  announcement_text?: string;
+  discount_percentage: number;
+  start_date: string;
+  end_date: string;
+  categories?: number[];
+  subcategories?: number[];
+  category_names?: string[];
+  subcategory_names?: string[];
+  is_active?: boolean;
+  is_currently_live?: boolean;
+  sort_order?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ProductImage {
   id?: number;
   url: string;
