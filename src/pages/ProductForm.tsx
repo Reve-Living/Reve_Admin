@@ -544,16 +544,33 @@ const ProductForm = () => {
     load();
   }, []);
 
-  // Load filter options tied only to the selected subcategory.
+  // Load filter options from the selected subcategory when present.
+  // If the category has no subcategories, fall back to category-level filters.
   useEffect(() => {
     const loadCategoryFilters = async () => {
-      if (!selectedCategory || !selectedSubcategory) {
+      if (!selectedCategory) {
         setCategoryFilterOptions([]);
         return;
       }
+
+      const categoryId = Number(selectedCategory);
+      const subcategoryId = Number(selectedSubcategory || 0);
+      const hasSubcategories = subcategories.some((sub) => Number(sub.category) === categoryId);
+      const filterQuery =
+        hasSubcategories && subcategoryId > 0
+          ? `/category-filters/?subcategory=${subcategoryId}`
+          : !hasSubcategories
+          ? `/category-filters/?category=${categoryId}`
+          : '';
+
+      if (!filterQuery) {
+        setCategoryFilterOptions([]);
+        return;
+      }
+
       try {
         const [categoryAssignments, typesRes, optsRes] = await Promise.all([
-          apiGet<CategoryFilter[]>(`/category-filters/?subcategory=${selectedSubcategory}`),
+          apiGet<CategoryFilter[]>(filterQuery),
           apiGet<FilterType[]>('/filter-types/'),
           apiGet<FilterOption[]>('/filter-options/'),
         ]);
@@ -591,7 +608,7 @@ const ProductForm = () => {
       }
     };
     loadCategoryFilters();
-  }, [categories, selectedCategory, selectedSubcategory]);
+  }, [selectedCategory, selectedSubcategory, subcategories]);
 
   useEffect(() => {
     const loadLibrary = async () => {
@@ -2749,7 +2766,7 @@ const ProductForm = () => {
                 <div>
                   <p className="text-sm font-medium">Filters</p>
                   <p className="text-xs text-muted-foreground">
-                    Optionally assign this product to subcategory filter options. These appear after you choose a subcategory.
+                    Optionally assign this product to filter options. If the category has subcategories, these appear after you choose a subcategory. Otherwise category filters appear automatically.
                   </p>
                 </div>
                 <Button
@@ -2768,7 +2785,7 @@ const ProductForm = () => {
               {categoryFilterOptions.length === 0 && filterOptions.length === 0 && (
                 <p className="text-xs text-muted-foreground">No filter options yet. Create them in the Filters or Categories page.</p>
               )}
-              {!selectedSubcategory && (
+              {!selectedSubcategory && availableSubcategories.length > 0 && (
                 <p className="text-xs text-muted-foreground">Select a subcategory to see its available filters.</p>
               )}
               {(() => {
