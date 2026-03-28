@@ -827,7 +827,7 @@ const Categories = () => {
 
       {showCategoryModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-2xl">
+          <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>{editingCategory ? 'Edit Category' : 'Add New Category'}</CardTitle>
