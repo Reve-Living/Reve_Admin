@@ -44,6 +44,21 @@ const emptySizeRow = (): MattressOptionPrice => ({
   price_both: null,
 });
 
+const getMattressScopeLabel = (
+  item: MattressOption,
+  categories: ApiCategory[],
+  subcategories: ApiSubCategory[]
+) => {
+  const categoryNames = categories
+    .filter((cat) => (item.categories || []).includes(cat.id))
+    .map((cat) => cat.name);
+  const subcategoryNames = subcategories
+    .filter((sub) => (item.subcategories || []).includes(sub.id))
+    .map((sub) => sub.name);
+  const labels = [...categoryNames, ...subcategoryNames];
+  return labels.length > 0 ? labels.join(" | ") : "All categories";
+};
+
 const Mattresses = () => {
   const [items, setItems] = useState<MattressOption[]>([]);
   const [editing, setEditing] = useState<MattressOption>(emptyOption());
@@ -302,7 +317,7 @@ const Mattresses = () => {
                 .filter((item) => item.id !== editing.id)
                 .map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.name}
+                    {item.name} - {getMattressScopeLabel(item, categories, subcategories)}
                   </option>
                 ))}
             </select>
@@ -341,16 +356,7 @@ const Mattresses = () => {
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Assigned to:{" "}
-                      {(() => {
-                        const categoryNames = categories
-                          .filter((cat) => (importSource.categories || []).includes(cat.id))
-                          .map((cat) => cat.name);
-                        const subNames = subcategories
-                          .filter((sub) => (importSource.subcategories || []).includes(sub.id))
-                          .map((sub) => sub.name);
-                        const labels = [...categoryNames, ...subNames];
-                        return labels.length > 0 ? labels.join(" | ") : "All categories";
-                      })()}
+                      {getMattressScopeLabel(importSource, categories, subcategories)}
                     </div>
                   </div>
                 </div>
