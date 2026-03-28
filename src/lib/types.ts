@@ -201,6 +201,8 @@ export interface Product {
   returns_title?: string;
   custom_info_sections?: { title?: string; content?: string }[];
   delivery_charges?: number;
+  assembly_service_enabled?: boolean;
+  assembly_service_price?: number;
   dimension_paragraph?: string;
   is_hidden?: boolean;
   in_stock: boolean;
@@ -247,6 +249,8 @@ export interface OrderItem {
   mattress_name?: string | null;
   mattress_id?: number | null;
   mattress_price?: number | null;
+  assembly_service_selected?: boolean;
+  assembly_service_price?: number;
 }
 
 export interface Order {

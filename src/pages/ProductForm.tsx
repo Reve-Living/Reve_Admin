@@ -120,6 +120,8 @@ const productSchema = z.object({
     original_price: z.number().nullable().optional(),
     discount_percentage: z.number().min(0).max(100).optional().nullable(),
     delivery_charges: z.number().min(0).optional().nullable(),
+    assembly_service_enabled: z.boolean().optional(),
+    assembly_service_price: z.number().min(0).optional().nullable(),
     sort_order: z.number().optional(),
     is_hidden: z.boolean().optional(),
     is_bestseller: z.boolean().optional(),
@@ -360,6 +362,8 @@ const ProductForm = () => {
       show_size_icons: true,
       discount_percentage: 0,
       delivery_charges: 0,
+      assembly_service_enabled: false,
+      assembly_service_price: 0,
       sort_order: 0,
       is_hidden: false,
       features: [],
@@ -658,6 +662,8 @@ const ProductForm = () => {
           : computedDiscount ?? 0;
         setValue('discount_percentage', discountPercentage);
         setValue('delivery_charges', Number(product.delivery_charges) || 0);
+        setValue('assembly_service_enabled', product.assembly_service_enabled === true);
+        setValue('assembly_service_price', Number(product.assembly_service_price) || 0);
         setValue('is_hidden', product.is_hidden === true);
         setValue('is_bestseller', product.is_bestseller);
         setValue('is_new', product.is_new);
@@ -1187,6 +1193,11 @@ const ProductForm = () => {
         delivery_charges: Number.isFinite(data.delivery_charges ?? null)
           ? Number(data.delivery_charges)
           : 0,
+        assembly_service_enabled: data.assembly_service_enabled === true,
+        assembly_service_price:
+          data.assembly_service_enabled && Number.isFinite(data.assembly_service_price ?? null)
+            ? Number(data.assembly_service_price)
+            : 0,
         is_hidden: data.is_hidden === true,
         show_size_icons: data.show_size_icons !== false,
         sort_order: Number.isFinite(data.sort_order) ? Number(data.sort_order) : 0,
@@ -1598,12 +1609,43 @@ const ProductForm = () => {
                 />
                 <label htmlFor="is_new" className="text-sm font-medium cursor-pointer">Mark as New</label>
               </div>
+              <div className="flex items-center space-x-2">
+                <Controller
+                  name="assembly_service_enabled"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      type="checkbox"
+                      id="assembly_service_enabled"
+                      checked={!!field.value}
+                      onChange={(e) => field.onChange(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                  )}
+                />
+                <label htmlFor="assembly_service_enabled" className="text-sm font-medium cursor-pointer">
+                  Enable Assembly Service
+                </label>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Delivery Charges (Â£)</label>
                 <Input type="number" {...register('delivery_charges', { valueAsNumber: true })} />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Assembly Service Price (Â£)</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  {...register('assembly_service_price', { valueAsNumber: true })}
+                  disabled={!watch('assembly_service_enabled')}
+                  placeholder="e.g. 49"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Used when the optional assembly checkbox is selected on the product page.
+                </p>
               </div>
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Original Price (auto)</label>

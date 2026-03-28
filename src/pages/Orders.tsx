@@ -30,6 +30,7 @@ const getOrderPartRank = (value?: string) => {
   if (lower.includes('storage')) return 4;
   if (lower.includes('headboard')) return 5;
   if (lower.startsWith('mattress')) return 6;
+  if (lower.startsWith('assembly service')) return 7;
   return 99;
 };
 
@@ -63,6 +64,9 @@ const getCleanItemSummary = (item: Order['items'][number]) => {
     .forEach((part) => addPart(part));
 
   if (item.mattress_name) addPart(`Mattress: ${item.mattress_name}`);
+  if (item.assembly_service_selected) {
+    addPart(`Assembly Service: £${Number(item.assembly_service_price || 0).toFixed(2)}`);
+  }
 
   return sortOrderParts(parts);
 };
