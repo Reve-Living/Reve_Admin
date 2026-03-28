@@ -213,6 +213,16 @@ export interface Product {
   styles: ProductStyle[];
   fabrics: ProductFabric[];
   mattresses?: ProductMattress[];
+  filters?: {
+    id?: number;
+    name?: string;
+    slug?: string;
+    options?: {
+      id?: number;
+      name?: string;
+      slug?: string;
+    }[];
+  }[];
   filter_values?: { filter_option_id?: number; filter_option?: number; filter_type?: string; option?: string }[];
 }
 

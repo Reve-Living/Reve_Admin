@@ -741,13 +741,23 @@ const ProductForm = () => {
         setValue('delivery_title', product.delivery_title || '');
         setValue('returns_title', product.returns_title || '');
         setValue('custom_info_sections', Array.isArray(product.custom_info_sections) ? product.custom_info_sections : []);
-        const filterValues = Array.isArray(product.filter_values)
+        const filterValuesFromFlatList = Array.isArray(product.filter_values)
           ? product.filter_values
               .map((fv) => ({
-                filter_option: fv.filter_option_id || null,
+                filter_option: fv.filter_option_id || fv.filter_option || null,
               }))
               .filter((fv) => fv.filter_option)
           : [];
+        const filterValuesFromGroupedFilters = Array.isArray(product.filters)
+          ? product.filters
+              .flatMap((group) => group.options || [])
+              .map((opt) => ({
+                filter_option: opt.id || null,
+              }))
+              .filter((fv) => fv.filter_option)
+          : [];
+        const filterValues =
+          filterValuesFromFlatList.length > 0 ? filterValuesFromFlatList : filterValuesFromGroupedFilters;
         replaceFilterValues(filterValues);
         setFilterValuesDirty(false);
         replaceImages(images);
