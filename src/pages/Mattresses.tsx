@@ -21,6 +21,20 @@ const emptyOption = (): MattressOption => ({
   prices: [],
 });
 
+const cloneMattressOption = (option: MattressOption): MattressOption => ({
+  ...emptyOption(),
+  ...option,
+  id: undefined,
+  prices: Array.isArray(option.prices)
+    ? option.prices.map((row) => ({
+        ...row,
+        id: undefined,
+      }))
+    : [],
+  categories: Array.isArray(option.categories) ? [...option.categories] : [],
+  subcategories: Array.isArray(option.subcategories) ? [...option.subcategories] : [],
+});
+
 const emptySizeRow = (): MattressOptionPrice => ({
   size_label: "",
   price: null,
@@ -36,6 +50,19 @@ const Mattresses = () => {
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<ApiCategory[]>([]);
   const [subcategories, setSubcategories] = useState<ApiSubCategory[]>([]);
+  const [importSourceId, setImportSourceId] = useState<number | null>(null);
+  const importSource = useMemo(
+    () => items.find((item) => item.id === importSourceId) ?? null,
+    [importSourceId, items]
+  );
+  const selectedCategoryNames = useMemo(
+    () => categories.filter((cat) => (editing.categories || []).includes(cat.id)).map((cat) => cat.name),
+    [categories, editing.categories]
+  );
+  const selectedSubcategoryNames = useMemo(
+    () => subcategories.filter((sub) => (editing.subcategories || []).includes(sub.id)).map((sub) => sub.name),
+    [editing.subcategories, subcategories]
+  );
 
   const load = async () => {
     try {
@@ -67,7 +94,45 @@ const Mattresses = () => {
       .catch(() => setSubcategories([]));
   }, []);
 
-  const resetForm = () => setEditing(emptyOption());
+  const resetForm = () => {
+    setEditing(emptyOption());
+    setImportSourceId(null);
+  };
+
+  const importMattressIntoForm = (sourceId: number, notify = true) => {
+    const hasScopeSelection = (editing.categories || []).length > 0 || (editing.subcategories || []).length > 0;
+    if (!hasScopeSelection) {
+      toast.error("Choose a category or subcategory first");
+      return;
+    }
+
+    const source = items.find((item) => item.id === sourceId);
+    if (!source) {
+      toast.error("Selected mattress could not be found");
+      return;
+    }
+
+    const preservedCategories = Array.isArray(editing.categories) ? [...editing.categories] : [];
+    const preservedSubcategories = Array.isArray(editing.subcategories) ? [...editing.subcategories] : [];
+    const imported = cloneMattressOption(source);
+
+    setEditing({
+      ...imported,
+      categories: preservedCategories.length > 0 ? preservedCategories : imported.categories,
+      subcategories: preservedSubcategories.length > 0 ? preservedSubcategories : imported.subcategories,
+    });
+    if (notify) {
+      toast.success("Mattress imported into form. You can now edit it for this category.");
+    }
+  };
+
+  const handleImport = () => {
+    if (!importSourceId) {
+      toast.error("Choose a mattress to import");
+      return;
+    }
+    importMattressIntoForm(importSourceId);
+  };
 
   const handleSave = async () => {
     const payload = { ...editing };
@@ -134,6 +199,165 @@ const Mattresses = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
+          <div className="rounded-lg border bg-white shadow-sm p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-espresso">1. Choose category first</p>
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline"
+                onClick={() => setEditing({ ...editing, categories: [], subcategories: [] })}
+              >
+                Clear
+              </button>
+            </div>
+            <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+              {categories.map((cat) => {
+                const checked = (editing.categories || []).includes(cat.id);
+                const subs = subcategories.filter((s) => s.category === cat.id);
+                return (
+                  <div key={cat.id} className="rounded-md border border-border/60 bg-ivory/60 p-2 space-y-1">
+                    <label className="flex items-center gap-2 text-sm font-medium text-espresso">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          const next = new Set(editing.categories || []);
+                          if (e.target.checked) next.add(cat.id);
+                          else next.delete(cat.id);
+                          setEditing({ ...editing, categories: Array.from(next) });
+                        }}
+                      />
+                      {cat.name}
+                    </label>
+                    {subs.length > 0 && (
+                      <div className="grid grid-cols-1 gap-1 pl-6">
+                        {subs.map((sub) => {
+                          const subChecked = (editing.subcategories || []).includes(sub.id);
+                          return (
+                            <label key={sub.id} className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <input
+                                type="checkbox"
+                                checked={subChecked}
+                                onChange={(e) => {
+                                  const next = new Set(editing.subcategories || []);
+                                  if (e.target.checked) next.add(sub.id);
+                                  else next.delete(sub.id);
+                                  setEditing({ ...editing, subcategories: Array.from(next) });
+                                }}
+                              />
+                              {sub.name}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {categories.length === 0 && (
+                <p className="text-xs text-muted-foreground">No categories found.</p>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Choose the category or subcategory first. Then import a mattress into that selection, or add a new one manually.
+            </p>
+            {(selectedCategoryNames.length > 0 || selectedSubcategoryNames.length > 0) && (
+              <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                <span className="font-medium text-espresso">Selected:</span>{" "}
+                {[...selectedCategoryNames, ...selectedSubcategoryNames].join(" • ")}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-lg border bg-ivory/60 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-espresso">2. Import existing mattress</p>
+                <p className="text-xs text-muted-foreground">
+                  Import copies all mattress details into the form. If you do not change anything, it will save the same mattress details for the selected category.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-semibold text-espresso hover:bg-muted"
+                onClick={handleImport}
+                disabled={(editing.categories || []).length === 0 && (editing.subcategories || []).length === 0}
+              >
+                Import mattress
+              </button>
+            </div>
+            <select
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              value={importSourceId ?? ""}
+              onChange={(e) => {
+                const nextId = e.target.value ? Number(e.target.value) : null;
+                setImportSourceId(nextId);
+                if (nextId) {
+                  importMattressIntoForm(nextId, false);
+                }
+              }}
+            >
+              <option value="">Select an existing mattress to import</option>
+              {items
+                .filter((item) => item.id !== editing.id)
+                .map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              Pick a mattress, click import, and all of its fields below will be filled in: name, description, image, base price, size prices, and bunk pricing.
+            </p>
+            {importSource && (
+              <div className="rounded-md border border-border/70 bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Selected mattress preview</p>
+                <div className="mt-2 flex items-start gap-3">
+                  {importSource.image_url ? (
+                    <img
+                      src={importSource.image_url}
+                      alt={importSource.name || "Mattress preview"}
+                      className="h-20 w-20 rounded-md border object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center rounded-md border bg-muted/40 text-center text-[11px] text-muted-foreground">
+                      No image
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="text-sm font-semibold text-espresso">{importSource.name || "Untitled mattress"}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-3">
+                      {importSource.description?.trim() || "No description on this mattress yet."}
+                    </p>
+                    <div className="text-xs text-muted-foreground">
+                      Base price:{" "}
+                      <span className="font-medium text-espresso">
+                        {importSource.price === 0 ? "Included" : importSource.price ?? "Not set"}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {importSource.prices?.length ? `${importSource.prices.length} size prices` : "No size prices"}{" "}
+                      {importSource.enable_bunk_positions ? "| bunk enabled" : "| bunk off"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Assigned to:{" "}
+                      {(() => {
+                        const categoryNames = categories
+                          .filter((cat) => (importSource.categories || []).includes(cat.id))
+                          .map((cat) => cat.name);
+                        const subNames = subcategories
+                          .filter((sub) => (importSource.subcategories || []).includes(sub.id))
+                          .map((sub) => sub.name);
+                        const labels = [...categoryNames, ...subNames];
+                        return labels.length > 0 ? labels.join(" | ") : "All categories";
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <label className="col-span-2 text-sm font-medium text-espresso">
               Name
@@ -192,71 +416,6 @@ const Mattresses = () => {
               </div>
             </div>
 
-            <div className="col-span-2">
-              <div className="rounded-lg border bg-white shadow-sm p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-espresso">Limit to Bed Categories/Subcategories (optional)</p>
-                  <button
-                    type="button"
-                    className="text-xs text-primary hover:underline"
-                    onClick={() => setEditing({ ...editing, categories: [], subcategories: [] })}
-                  >
-                    Clear
-                  </button>
-                </div>
-                <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
-                  {categories.map((cat) => {
-                    const checked = (editing.categories || []).includes(cat.id);
-                    const subs = subcategories.filter((s) => s.category === cat.id);
-                    return (
-                      <div key={cat.id} className="rounded-md border border-border/60 bg-ivory/60 p-2 space-y-1">
-                        <label className="flex items-center gap-2 text-sm font-medium text-espresso">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              const next = new Set(editing.categories || []);
-                              if (e.target.checked) next.add(cat.id);
-                              else next.delete(cat.id);
-                              setEditing({ ...editing, categories: Array.from(next) });
-                            }}
-                          />
-                          {cat.name}
-                        </label>
-                        {subs.length > 0 && (
-                          <div className="grid grid-cols-1 gap-1 pl-6">
-                            {subs.map((sub) => {
-                              const subChecked = (editing.subcategories || []).includes(sub.id);
-                              return (
-                                <label key={sub.id} className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <input
-                                    type="checkbox"
-                                    checked={subChecked}
-                                    onChange={(e) => {
-                                      const next = new Set(editing.subcategories || []);
-                                      if (e.target.checked) next.add(sub.id);
-                                      else next.delete(sub.id);
-                                      setEditing({ ...editing, subcategories: Array.from(next) });
-                                    }}
-                                  />
-                                  {sub.name}
-                                </label>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {categories.length === 0 && (
-                    <p className="text-xs text-muted-foreground">No categories found.</p>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Leave empty to show this mattress for all products; otherwise it only appears for the selected categories/subcategories.
-                </p>
-              </div>
-            </div>
             <label className="text-sm font-medium text-espresso">
               Base price
               <input
@@ -266,6 +425,9 @@ const Mattresses = () => {
                 value={editing.price ?? ""}
                 onChange={(e) => setEditing({ ...editing, price: e.target.value === "" ? null : Number(e.target.value) })}
               />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Set to 0 to show this mattress as Included on the frontend.
+              </p>
             </label>
             <label className="text-sm font-medium text-espresso">
               Original price (discount ref)
@@ -321,6 +483,9 @@ const Mattresses = () => {
                 Add size
               </button>
             </div>
+            <p className="mb-2 text-xs text-muted-foreground">
+              If a size price is 0, that mattress size will appear as Included on the frontend.
+            </p>
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
               {activeSizes.length === 0 && <p className="text-xs text-muted-foreground">No size overrides added.</p>}
               {activeSizes.map((row, idx) => (
@@ -410,6 +575,18 @@ const Mattresses = () => {
                     <div className="text-xs text-muted-foreground mt-1">
                       Base: {item.price ?? 0} {item.enable_bunk_positions ? "• bunk" : ""}
                       {item.prices && item.prices.length ? ` • ${item.prices.length} size prices` : ""}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Assigned to: {(() => {
+                        const categoryNames = categories
+                          .filter((cat) => (item.categories || []).includes(cat.id))
+                          .map((cat) => cat.name);
+                        const subNames = subcategories
+                          .filter((sub) => (item.subcategories || []).includes(sub.id))
+                          .map((sub) => sub.name);
+                        const labels = [...categoryNames, ...subNames];
+                        return labels.length > 0 ? labels.join(" • ") : "All categories";
+                      })()}
                     </div>
                   </div>
                   <button
