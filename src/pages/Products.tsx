@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Edit, Trash2 } from 'lucide-react';
+import { Edit, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { apiDelete, apiGet } from '../lib/api';
+import { apiDelete, apiGet, apiPatch } from '../lib/api';
 import type { Product, Category, SubCategory } from '../lib/types';
 import { toast } from 'sonner';
 
@@ -56,6 +56,16 @@ const Products = () => {
       await loadData();
     } catch {
       toast.error('Delete failed');
+    }
+  };
+
+  const handleToggleHidden = async (product: Product) => {
+    try {
+      await apiPatch(`/products/${product.id}/`, { is_hidden: !product.is_hidden });
+      toast.success(product.is_hidden ? 'Product is now visible on the storefront' : 'Product hidden from the storefront');
+      await loadData();
+    } catch {
+      toast.error('Failed to update product visibility');
     }
   };
 
@@ -186,6 +196,7 @@ const Products = () => {
                 <TableHead>Category</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Stock</TableHead>
+                <TableHead>Visibility</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -205,7 +216,24 @@ const Products = () => {
                       {product.in_stock ? 'In Stock' : 'Out of Stock'}
                     </span>
                   </TableCell>
+                  <TableCell>
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs ${
+                        product.is_hidden ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                      }`}
+                    >
+                      {product.is_hidden ? 'Hidden' : 'Visible'}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-right space-x-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title={product.is_hidden ? 'Unhide product' : 'Hide product'}
+                      onClick={() => handleToggleHidden(product)}
+                    >
+                      {product.is_hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                    </Button>
                     <Link to={`/products/edit/${product.id}`}>
                       <Button variant="ghost" size="icon">
                         <Edit className="h-4 w-4" />
@@ -224,7 +252,7 @@ const Products = () => {
               ))}
               {filteredProducts.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-6">
+                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
                     No products found for the selected filters.
                   </TableCell>
                 </TableRow>

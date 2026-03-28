@@ -13,6 +13,7 @@ type HeroSlideForm = {
   subtitle: string;
   category: number | null;
   subcategory: number | null;
+  selected_subcategories: number[];
   cta_text: string;
   cta_link: string;
   image: string;
@@ -25,6 +26,7 @@ const emptyForm: HeroSlideForm = {
   subtitle: '',
   category: null,
   subcategory: null,
+  selected_subcategories: [],
   cta_text: 'Shop Now',
   cta_link: '',
   image: '',
@@ -101,9 +103,14 @@ const HeroSlides = () => {
         if (form.subcategory && !data.find((s) => s.id === form.subcategory)) {
           setForm((prev) => ({ ...prev, subcategory: null }));
         }
+        const validIds = new Set(data.map((s) => s.id));
+        setForm((prev) => ({
+          ...prev,
+          selected_subcategories: prev.selected_subcategories.filter((id) => validIds.has(id)),
+        }));
       } catch {
         setSubcategories([]);
-        setForm((prev) => ({ ...prev, subcategory: null }));
+        setForm((prev) => ({ ...prev, subcategory: null, selected_subcategories: [] }));
       }
     };
     loadSubs();
@@ -148,6 +155,7 @@ const HeroSlides = () => {
       subtitle: form.subtitle.trim(),
       category: form.category,
       subcategory: form.subcategory,
+      selected_subcategories: form.selected_subcategories,
       cta_text: form.cta_text.trim() || 'Shop Now',
       cta_link: form.cta_link.trim(),
       image: form.image.trim(),
@@ -179,6 +187,7 @@ const HeroSlides = () => {
       subtitle: slide.subtitle || '',
       category: slide.category ?? null,
       subcategory: slide.subcategory ?? null,
+      selected_subcategories: slide.selected_subcategories || [],
       cta_text: slide.cta_text || 'Shop Now',
       cta_link: slide.cta_link || '',
       image: slide.image || '',
@@ -387,6 +396,38 @@ const HeroSlides = () => {
               />
             </div>
           </div>
+
+          {form.category && subcategories.length > 0 && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso">Subcategories to show for this slide</label>
+              <div className="max-h-48 overflow-y-auto rounded-md border border-input bg-white p-3 space-y-2">
+                {subcategories.map((subcategory) => {
+                  const checked = form.selected_subcategories.includes(subcategory.id);
+                  return (
+                    <label key={subcategory.id} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            selected_subcategories: e.target.checked
+                              ? [...prev.selected_subcategories, subcategory.id]
+                              : prev.selected_subcategories.filter((id) => id !== subcategory.id),
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                      />
+                      <span>{subcategory.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                These checked subcategories will be shown on the category landing page for this slide. Leave all unchecked to show all subcategories.
+              </p>
+            </div>
+          )}
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">

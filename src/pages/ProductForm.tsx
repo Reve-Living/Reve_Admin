@@ -121,6 +121,7 @@ const productSchema = z.object({
     discount_percentage: z.number().min(0).max(100).optional().nullable(),
     delivery_charges: z.number().min(0).optional().nullable(),
     sort_order: z.number().optional(),
+    is_hidden: z.boolean().optional(),
     is_bestseller: z.boolean().optional(),
     is_new: z.boolean().optional(),
     show_size_icons: z.boolean().optional(),
@@ -360,6 +361,7 @@ const ProductForm = () => {
       discount_percentage: 0,
       delivery_charges: 0,
       sort_order: 0,
+      is_hidden: false,
       features: [],
       dimensions: [],
       dimension_images: [],
@@ -656,6 +658,7 @@ const ProductForm = () => {
           : computedDiscount ?? 0;
         setValue('discount_percentage', discountPercentage);
         setValue('delivery_charges', Number(product.delivery_charges) || 0);
+        setValue('is_hidden', product.is_hidden === true);
         setValue('is_bestseller', product.is_bestseller);
         setValue('is_new', product.is_new);
         setValue('show_size_icons', product.show_size_icons !== false);
@@ -1184,6 +1187,7 @@ const ProductForm = () => {
         delivery_charges: Number.isFinite(data.delivery_charges ?? null)
           ? Number(data.delivery_charges)
           : 0,
+        is_hidden: data.is_hidden === true,
         show_size_icons: data.show_size_icons !== false,
         sort_order: Number.isFinite(data.sort_order) ? Number(data.sort_order) : 0,
         short_description: data.short_description.trim(),
@@ -1546,6 +1550,22 @@ const ProductForm = () => {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center space-x-2">
+                <Controller
+                  name="is_hidden"
+                  control={control}
+                  render={({ field }) => (
+                    <input
+                      type="checkbox"
+                      id="is_hidden"
+                      checked={!!field.value}
+                      onChange={(e) => field.onChange(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                  )}
+                />
+                <label htmlFor="is_hidden" className="text-sm font-medium cursor-pointer">Hide from storefront</label>
+              </div>
               <div className="flex items-center space-x-2">
                 <Controller
                   name="is_bestseller"

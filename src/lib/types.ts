@@ -43,6 +43,9 @@ export interface HeroSlide {
   subtitle?: string;
   category?: number | null;
   subcategory?: number | null;
+  selected_subcategories?: number[];
+  selected_subcategory_slugs?: string[];
+  selected_subcategory_names?: string[];
   category_name?: string;
   category_slug?: string;
   subcategory_name?: string;
@@ -199,6 +202,7 @@ export interface Product {
   custom_info_sections?: { title?: string; content?: string }[];
   delivery_charges?: number;
   dimension_paragraph?: string;
+  is_hidden?: boolean;
   in_stock: boolean;
   is_bestseller: boolean;
   is_new: boolean;
