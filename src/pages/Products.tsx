@@ -15,7 +15,7 @@ const Products = () => {
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | 'all'>('all');
   const getDisplayOrder = (value?: number) => {
     const num = Number(value);
-    return Number.isFinite(num) && num > 0 ? num : Number.MAX_SAFE_INTEGER;
+    return Number.isFinite(num) ? num : 0;
   };
 
   const loadData = async () => {

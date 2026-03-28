@@ -40,6 +40,8 @@ const Categories = () => {
 
   const [categoryName, setCategoryName] = useState('');
   const [categorySlug, setCategorySlug] = useState('');
+  const [categoryDescription, setCategoryDescription] = useState('');
+  const [categoryImageUrl, setCategoryImageUrl] = useState('');
   const [categoryMetaTitle, setCategoryMetaTitle] = useState('');
   const [categoryMetaDescription, setCategoryMetaDescription] = useState('');
   const [categoryImageAltText, setCategoryImageAltText] = useState('');
@@ -134,6 +136,8 @@ const Categories = () => {
       setEditingCategory(category);
       setCategoryName(category.name);
       setCategorySlug(category.slug || '');
+      setCategoryDescription(category.description || '');
+      setCategoryImageUrl(category.image || '');
       setCategoryMetaTitle(category.meta_title || '');
       setCategoryMetaDescription(category.meta_description || '');
       setCategoryImageAltText(category.image_alt_text || '');
@@ -142,6 +146,8 @@ const Categories = () => {
       setEditingCategory(null);
       setCategoryName('');
       setCategorySlug('');
+      setCategoryDescription('');
+      setCategoryImageUrl('');
       setCategoryMetaTitle('');
       setCategoryMetaDescription('');
       setCategoryImageAltText('');
@@ -351,6 +357,8 @@ const Categories = () => {
           ...editingCategory,
           name: categoryName.trim(),
           slug: categorySlug.trim() || slugify(categoryName),
+          description: categoryDescription,
+          image: categoryImageUrl,
           meta_title: categoryMetaTitle.trim(),
           meta_description: categoryMetaDescription.trim(),
           image_alt_text: categoryImageAltText.trim(),
@@ -361,6 +369,8 @@ const Categories = () => {
         await apiPost('/categories/', {
           name: categoryName.trim(),
           slug: categorySlug.trim() || slugify(categoryName),
+          description: categoryDescription,
+          image: categoryImageUrl,
           meta_title: categoryMetaTitle.trim(),
           meta_description: categoryMetaDescription.trim(),
           image_alt_text: categoryImageAltText.trim(),
@@ -371,6 +381,8 @@ const Categories = () => {
       setShowCategoryModal(false);
       setCategoryName('');
       setCategorySlug('');
+      setCategoryDescription('');
+      setCategoryImageUrl('');
       setCategoryMetaTitle('');
       setCategoryMetaDescription('');
       setCategoryImageAltText('');
@@ -604,6 +616,19 @@ const Categories = () => {
     }
   };
 
+  const handleUploadCategoryImage = async (file?: File) => {
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const res = await apiUpload('/uploads/', file);
+      setCategoryImageUrl(res.url);
+    } catch {
+      toast.error('Upload failed');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleBoldDescription = () => {
     const textarea = descriptionRef.current;
     if (!textarea) return;
@@ -829,6 +854,49 @@ const Categories = () => {
                   onChange={(e) => setCategorySlug(e.target.value)}
                   placeholder="e.g. divan-beds"
                 />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Description</label>
+                <textarea
+                  value={categoryDescription}
+                  onChange={(e) => setCategoryDescription(e.target.value)}
+                  rows={5}
+                  placeholder="Introductory text shown on the category page..."
+                  className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Category Image</label>
+                <Input
+                  type="file"
+                  accept={IMAGE_UPLOAD_ACCEPT}
+                  onChange={(e) => handleUploadCategoryImage(e.target.files?.[0])}
+                  className="cursor-pointer bg-black/5"
+                />
+                <p className="text-xs text-muted-foreground">{WEBP_UPLOAD_HINT}</p>
+                {isUploading && (
+                  <p className="text-xs text-muted-foreground">Uploading...</p>
+                )}
+                {categoryImageUrl && (
+                  <div className="relative">
+                    <img
+                      src={categoryImageUrl}
+                      alt="Category preview"
+                      className="w-full h-40 object-cover rounded-md border"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="absolute top-2 right-2"
+                      onClick={() => setCategoryImageUrl('')}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                )}
               </div>
 
               <div className="grid gap-2">
