@@ -408,10 +408,35 @@ const ProductForm = () => {
       : '';
 
   const deriveDimensionColumnsFromRows = (rows: ProductDimensionRow[]) => {
-    const columnSet = new Set<string>(DIMENSION_SIZE_COLUMNS);
-    rows.forEach((row) => Object.keys(row.values || {}).forEach((key) => columnSet.add(key)));
-    return Array.from(columnSet);
+    const discoveredColumns = Array.from(
+      new Set(
+        rows.flatMap((row) =>
+          Object.keys(row.values || {})
+            .map((key) => key.trim())
+            .filter(Boolean)
+        )
+      )
+    );
+
+    if (discoveredColumns.length === 0) {
+      return [...DIMENSION_SIZE_COLUMNS];
+    }
+
+    const defaultColumns = DIMENSION_SIZE_COLUMNS.filter((column) => discoveredColumns.includes(column));
+    const customColumns = discoveredColumns.filter((column) => !DIMENSION_SIZE_COLUMNS.includes(column));
+    return [...defaultColumns, ...customColumns];
   };
+
+  const normalizeDimensionRowsForColumns = (
+    rows: ProductDimensionRow[],
+    columns: string[]
+  ): ProductDimensionRow[] =>
+    rows.map((row) => ({
+      measurement: (row.measurement || '').trim(),
+      values: Object.fromEntries(
+        columns.map((column) => [column, (row.values?.[column] ?? '').toString().trim()])
+      ),
+    }));
 
   const adjustWidthForWingback = (rows: ProductDimensionRow[]): ProductDimensionRow[] => {
     if (!hasWingbackHeadboard) return rows;
@@ -720,10 +745,12 @@ const ProductForm = () => {
           question: (faq.question || '').trim(),
           answer: (faq.answer || '').trim(),
         }));
-        const dimensions = (product.dimensions || []).map((row) => ({
+        const rawDimensions = (product.dimensions || []).map((row) => ({
           measurement: (row.measurement || '').trim(),
           values: row.values || {},
         }));
+        const dimensionColumns = deriveDimensionColumnsFromRows(rawDimensions);
+        const dimensions = normalizeDimensionRowsForColumns(rawDimensions, dimensionColumns);
         const dimensionImages = (product.dimension_images || []).map((img) => ({
           size: (img.size || '').trim(),
           url: (img.url || '').trim(),
@@ -733,7 +760,7 @@ const ProductForm = () => {
         setValue('dimension_images', dimensionImages);
         replaceDimensionImages(dimensionImages);
         setValue('show_dimensions_table', product.show_dimensions_table !== false);
-        setDimensionColumns(deriveDimensionColumnsFromRows(dimensions));
+        setDimensionColumns(dimensionColumns);
         setValue('images', images);
         setValue('videos', videos);
         setValue('colors', colors);
@@ -924,12 +951,14 @@ const ProductForm = () => {
     }
     try {
       const product = await apiGet<Product>(`/products/${selectedImportProductId}/`);
-      const dimensions = Array.isArray(product.dimensions)
+      const rawDimensions = Array.isArray(product.dimensions)
         ? product.dimensions.map((row) => ({
             measurement: row.measurement || '',
             values: row.values || {},
           }))
         : [];
+      const dimensionColumns = deriveDimensionColumnsFromRows(rawDimensions);
+      const dimensions = normalizeDimensionRowsForColumns(rawDimensions, dimensionColumns);
       const images = Array.isArray(product.dimension_images)
         ? product.dimension_images.map((img) => ({
             size: img.size || '',
@@ -939,7 +968,7 @@ const ProductForm = () => {
 
       setValue('dimensions', dimensions);
       replaceDimensions(dimensions);
-      setDimensionColumns(deriveDimensionColumnsFromRows(dimensions));
+      setDimensionColumns(dimensionColumns);
 
       setValue('dimension_images', images);
       replaceDimensionImages(images);
@@ -2666,7 +2695,7 @@ const ProductForm = () => {
               <textarea
                 {...register('dimension_note')}
                 rows={3}
-                placeholder="e.g. All dimensions are approximate and may vary by +/-5 cm due to manufacturing tolerances."
+                placeholder="e.g. All dimensions are approximate and may vary by +/-2 cm (approximately +/-1 inches) due to manufacturing tolerances."
                 className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               />
               <p className="text-xs text-muted-foreground">Leave empty to use the default note.</p>
