@@ -1746,7 +1746,7 @@ const ProductForm = () => {
                     )}
                   </div>
                   {watch(`images.${index}.url`) && (
-                    <img src={watch(`images.${index}.url`) || undefined} alt={`Preview ${index + 1}`} className="w-32 h-32 object-cover rounded-md border" />
+                    <img src={watch(`images.${index}.url`) || undefined} alt={`Preview ${index + 1}`} className="h-32 w-32 rounded-md border bg-black/5 object-cover" />
                   )}
                   <div className="grid gap-1">
                     <label className="text-xs text-muted-foreground">Image ALT text</label>
