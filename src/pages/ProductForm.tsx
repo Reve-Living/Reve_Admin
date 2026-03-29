@@ -221,6 +221,7 @@ const productSchema = z.object({
       )
       .optional(),
     dimension_paragraph: z.string().optional(),
+    dimension_note: z.string().optional(),
     show_dimensions_table: z.boolean().optional(),
     faqs: z
       .array(
@@ -370,6 +371,7 @@ const ProductForm = () => {
       dimensions: [],
       dimension_images: [],
       dimension_paragraph: '',
+      dimension_note: '',
       show_dimensions_table: true,
       faqs: [],
       delivery_info: '',
@@ -727,6 +729,7 @@ const ProductForm = () => {
           url: (img.url || '').trim(),
         }));
         setValue('dimension_paragraph', product.dimension_paragraph || '');
+        setValue('dimension_note', product.dimension_note || '');
         setValue('dimension_images', dimensionImages);
         replaceDimensionImages(dimensionImages);
         setValue('show_dimensions_table', product.show_dimensions_table !== false);
@@ -942,6 +945,7 @@ const ProductForm = () => {
       replaceDimensionImages(images);
 
       setValue('dimension_paragraph', product.dimension_paragraph || '');
+      setValue('dimension_note', product.dimension_note || '');
       setValue('show_dimensions_table', product.show_dimensions_table !== false);
 
       toast.success(`Imported dimensions from ${product.name}`);
@@ -1329,6 +1333,7 @@ const ProductForm = () => {
           }))
           .filter((img) => img.size.length > 0 && img.url.length > 0),
         dimension_paragraph: (data.dimension_paragraph || '').trim(),
+        dimension_note: (data.dimension_note || '').trim(),
         show_dimensions_table: data.show_dimensions_table !== false,
         faqs: (data.faqs || [])
           .map((faq) => ({
@@ -2651,6 +2656,20 @@ const ProductForm = () => {
                 className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               />
               <p className="text-xs text-muted-foreground">If filled, the storefront will show this text. Leave empty to show the table above.</p>
+            </div>
+
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Dimensions Note (optional)</label>
+                <p className="text-xs text-muted-foreground">Shown below the dimensions table and in the dimensions popup.</p>
+              </div>
+              <textarea
+                {...register('dimension_note')}
+                rows={3}
+                placeholder="e.g. All dimensions are approximate and may vary by +/-5 cm due to manufacturing tolerances."
+                className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <p className="text-xs text-muted-foreground">Leave empty to use the default note.</p>
             </div>
 
             <div className="grid gap-2">

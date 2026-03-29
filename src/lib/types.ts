@@ -204,6 +204,7 @@ export interface Product {
   assembly_service_enabled?: boolean;
   assembly_service_price?: number;
   dimension_paragraph?: string;
+  dimension_note?: string;
   is_hidden?: boolean;
   in_stock: boolean;
   is_bestseller: boolean;
