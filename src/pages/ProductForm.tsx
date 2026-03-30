@@ -284,6 +284,15 @@ const minifySvgMarkup = (svg: string): string =>
     .replace(/>\s+</g, '><')
     .trim();
 
+const parsePriceDeltaFromText = (label = '', description = ''): number => {
+  const text = `${label} ${description}`;
+  const plusMatch = text.match(/\+\s*£?\s*(\d+(\.\d+)?)/i);
+  if (plusMatch) return Number(plusMatch[1] || 0);
+  const pipeMatch = text.match(/\|\s*(-?\d+(\.\d+)?)/);
+  if (pipeMatch) return Number(pipeMatch[1] || 0);
+  return 0;
+};
+
 const normalizeStyleOptions = (options: unknown, includeEmpty = false): StyleOptionInput[] => {
   if (!Array.isArray(options)) return [];
   return (
@@ -304,7 +313,12 @@ const normalizeStyleOptions = (options: unknown, includeEmpty = false): StyleOpt
           const rawIcon = (option as { icon_url?: unknown }).icon_url;
           const icon_url = typeof rawIcon === 'string' ? rawIcon.trim() : '';
           const rawDelta = (option as { price_delta?: unknown }).price_delta;
-          const price_delta = typeof rawDelta === 'number' ? rawDelta : Number(rawDelta || 0);
+          const price_delta =
+            typeof rawDelta === 'number'
+              ? rawDelta
+              : typeof rawDelta === 'string' && rawDelta.trim() !== ''
+              ? Number(rawDelta)
+              : parsePriceDeltaFromText(label, description);
           const rawSize = (option as { size?: unknown }).size;
           const size = typeof rawSize === 'string' ? rawSize.trim() : '';
           const rawSizes = (option as { sizes?: unknown }).sizes;
