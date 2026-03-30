@@ -324,6 +324,15 @@ const normalizeStyleOptions = (options: unknown, includeEmpty = false): StyleOpt
   );
 };
 
+const normalizeStoredSizePrice = (productBasePrice: number, storedValue?: number): number => {
+  const base = Number.isFinite(productBasePrice) ? Number(productBasePrice) : 0;
+  const raw = Number(storedValue ?? 0);
+  if (!Number.isFinite(raw)) return base;
+  if (raw === 0) return base;
+  if (base > 0 && raw < base) return base + raw;
+  return raw;
+};
+
 const ProductForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -767,7 +776,7 @@ const ProductForm = () => {
         const sizes = product.sizes.map((s) => ({
           name: s.name,
           description: s.description || '',
-          price_delta: Number(s.price_delta ?? 0),
+          price_delta: normalizeStoredSizePrice(Number(product.price ?? 0), Number(s.price_delta ?? 0)),
         }));
         setValue('sizes', sizes);
         setValue('styles', styles);
@@ -912,7 +921,7 @@ const ProductForm = () => {
       const sizes = (product.sizes || []).map((s) => ({
         name: s.name || '',
         description: s.description || '',
-        price_delta: Number.isFinite(Number(s.price_delta)) ? Number(s.price_delta) : 0,
+        price_delta: normalizeStoredSizePrice(Number(product.price ?? 0), Number(s.price_delta ?? 0)),
       }));
       const merged = [...(watch('sizes') || []), ...sizes];
       setValue('sizes', merged);

@@ -343,15 +343,31 @@ const LifestyleContent = () => {
           <div className="grid gap-4 md:grid-cols-[2fr,1fr]">
             <div className="space-y-2">
               <label className="text-sm font-medium text-espresso">Article Image</label>
-              <Input value={articleForm.image} onChange={(e) => setArticleForm((prev) => ({ ...prev, image: e.target.value }))} placeholder="https://..." />
-              <input type="file" accept={IMAGE_UPLOAD_ACCEPT} onChange={(e) => onUploadFile(e, 'image')} disabled={isUploadingImage} className="text-sm" />
+              <Input
+                value={articleForm.image}
+                onChange={(e) => setArticleForm((prev) => ({ ...prev, image: e.target.value }))}
+                placeholder="Paste image URL here, or upload from computer below"
+              />
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Choose image from computer</label>
+                <input
+                  type="file"
+                  accept={IMAGE_UPLOAD_ACCEPT}
+                  onChange={(e) => onUploadFile(e, 'image')}
+                  disabled={isUploadingImage}
+                  className="text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  You can either paste an image URL or choose a file from your computer.
+                </p>
+              </div>
             </div>
             {articleForm.image && <img src={articleForm.image} alt="Preview" className="h-40 w-full rounded object-cover" />}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Read More Type</label>
+              <label className="text-sm font-medium text-espresso">Read More Button Type</label>
               <select
                 value={articleForm.read_more_type}
                 onChange={(e) =>
@@ -363,6 +379,9 @@ const LifestyleContent = () => {
                 <option value="url">Open URL</option>
                 <option value="pdf">Open PDF</option>
               </select>
+              <p className="text-xs text-muted-foreground">
+                Choose whether the Read More button should open a web link or a PDF file.
+              </p>
             </div>
             <label className="flex items-center gap-2 text-sm font-medium text-espresso md:self-end">
               <input
@@ -377,24 +396,39 @@ const LifestyleContent = () => {
 
           {articleForm.read_more_type === 'url' && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Read More URL</label>
+              <label className="text-sm font-medium text-espresso">Read More Button Leads To</label>
               <Input
                 value={articleForm.read_more_url}
                 onChange={(e) => setArticleForm((prev) => ({ ...prev, read_more_url: e.target.value }))}
                 placeholder="https://... or /some-page"
               />
+              <p className="text-xs text-muted-foreground">
+                Paste the URL the customer should open when clicking Read More.
+              </p>
             </div>
           )}
 
           {articleForm.read_more_type === 'pdf' && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Read More PDF</label>
+              <label className="text-sm font-medium text-espresso">Read More Button Leads To</label>
               <Input
                 value={articleForm.read_more_pdf}
                 onChange={(e) => setArticleForm((prev) => ({ ...prev, read_more_pdf: e.target.value }))}
-                placeholder="https://...pdf"
+                placeholder="Paste PDF link here, or upload PDF from computer below"
               />
-              <input type="file" accept=".pdf,application/pdf" onChange={(e) => onUploadFile(e, 'read_more_pdf')} disabled={isUploadingPdf} className="text-sm" />
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Choose PDF from computer</label>
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={(e) => onUploadFile(e, 'read_more_pdf')}
+                  disabled={isUploadingPdf}
+                  className="text-sm"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Upload a PDF from your computer, or paste a PDF link manually.
+                </p>
+              </div>
             </div>
           )}
 
