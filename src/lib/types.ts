@@ -5,6 +5,7 @@ export interface Category {
   description: string;
   image: string;
   show_in_collections?: boolean;
+  show_in_all_collections?: boolean;
   image_alt_text?: string;
   meta_title?: string;
   meta_description?: string;
@@ -21,6 +22,7 @@ export interface SubCategory {
   image: string;
   sort_order?: number;
   show_in_collections?: boolean;
+  show_in_all_collections?: boolean;
   image_alt_text?: string;
   meta_title?: string;
   meta_description?: string;
@@ -57,6 +59,32 @@ export interface HeroSlide {
   sort_order?: number;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface LifestyleArticle {
+  id?: number;
+  section: number;
+  title: string;
+  description?: string;
+  image?: string;
+  read_more_type?: 'none' | 'url' | 'pdf';
+  read_more_url?: string;
+  read_more_pdf?: string;
+  read_more_target?: string;
+  is_active?: boolean;
+  sort_order?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface LifestyleSection {
+  id?: number;
+  title: string;
+  subtitle?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  articles?: LifestyleArticle[];
 }
 
 export interface Promotion {

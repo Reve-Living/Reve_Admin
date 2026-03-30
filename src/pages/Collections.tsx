@@ -12,6 +12,7 @@ type CollectionItem = {
   image: string;
   sort_order?: number;
   show_in_collections?: boolean;
+  show_in_all_collections?: boolean;
   itemType: 'category' | 'subcategory';
   parentName?: string;
 };
@@ -50,6 +51,7 @@ const Collections = () => {
       image: category.image || '',
       sort_order: category.sort_order,
       show_in_collections: category.show_in_collections,
+      show_in_all_collections: category.show_in_all_collections,
       itemType: 'category',
     }));
 
@@ -60,6 +62,7 @@ const Collections = () => {
       image: subcategory.image || '',
       sort_order: subcategory.sort_order,
       show_in_collections: subcategory.show_in_collections,
+      show_in_all_collections: subcategory.show_in_all_collections,
       itemType: 'subcategory',
       parentName: categoryMap.get(subcategory.category) || '',
     }));
@@ -72,9 +75,14 @@ const Collections = () => {
   }, [categories, subcategories]);
 
   const selectedCount = items.filter((item) => item.show_in_collections).length;
+  const selectedViewAllCount = items.filter((item) => item.show_in_all_collections).length;
 
-  const handleToggle = async (item: CollectionItem, checked: boolean) => {
-    const key = `${item.itemType}-${item.id}`;
+  const handleToggle = async (
+    item: CollectionItem,
+    field: 'show_in_collections' | 'show_in_all_collections',
+    checked: boolean
+  ) => {
+    const key = `${item.itemType}-${item.id}-${field}`;
     setUpdatingKeys((prev) => [...prev, key]);
 
     try {
@@ -84,22 +92,38 @@ const Collections = () => {
 
         await apiPut(`/categories/${item.id}/`, {
           ...category,
-          show_in_collections: checked,
+          [field]: checked,
         });
+
+        setCategories((prev) =>
+          prev.map((entry) => (entry.id === item.id ? { ...entry, [field]: checked } : entry))
+        );
       } else {
         const subcategory = subcategories.find((entry) => entry.id === item.id);
         if (!subcategory) throw new Error('Subcategory not found');
 
         await apiPut(`/subcategories/${item.id}/`, {
           ...subcategory,
-          show_in_collections: checked,
+          [field]: checked,
         });
+
+        setSubcategories((prev) =>
+          prev.map((entry) => (entry.id === item.id ? { ...entry, [field]: checked } : entry))
+        );
       }
 
-      toast.success(checked ? 'Added to homepage top display' : 'Removed from homepage top display');
-      await loadData();
+      toast.success(
+        field === 'show_in_collections'
+          ? checked
+            ? 'Added to homepage top display'
+            : 'Removed from homepage top display'
+          : checked
+            ? 'Added to View All Collections'
+            : 'Removed from View All Collections'
+      );
     } catch {
       toast.error('Failed to update display selection');
+      await loadData();
     } finally {
       setUpdatingKeys((prev) => prev.filter((entry) => entry !== key));
     }
@@ -120,7 +144,7 @@ const Collections = () => {
         </CardHeader>
         <CardContent>
           <p className="mb-4 text-sm text-muted-foreground">
-            Selected items: {selectedCount}. Only 4 selected items will be shown on the homepage.
+            Homepage top 4 selected: {selectedCount}. View All Collections selected: {selectedViewAllCount}.
           </p>
 
           <Table>
@@ -132,13 +156,15 @@ const Collections = () => {
                 <TableHead>Parent</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Show In Top 4</TableHead>
+                <TableHead>Show In View All</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {items.map((item) => {
-                const key = `${item.itemType}-${item.id}`;
+                const topKey = `${item.itemType}-${item.id}-show_in_collections`;
+                const viewAllKey = `${item.itemType}-${item.id}-show_in_all_collections`;
                 return (
-                  <TableRow key={key}>
+                  <TableRow key={`${item.itemType}-${item.id}`}>
                     <TableCell>
                       {item.image ? (
                         <img
@@ -158,11 +184,24 @@ const Collections = () => {
                       <label className="flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
+                          className="h-4 w-4 rounded border-input accent-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
                           checked={Boolean(item.show_in_collections)}
-                          disabled={updatingKeys.includes(key)}
-                          onChange={(e) => handleToggle(item, e.target.checked)}
+                          disabled={updatingKeys.includes(topKey)}
+                          onChange={(e) => handleToggle(item, 'show_in_collections', e.target.checked)}
                         />
                         <span>{item.show_in_collections ? 'Selected' : 'Not selected'}</span>
+                      </label>
+                    </TableCell>
+                    <TableCell>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-input accent-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                          checked={Boolean(item.show_in_all_collections)}
+                          disabled={updatingKeys.includes(viewAllKey)}
+                          onChange={(e) => handleToggle(item, 'show_in_all_collections', e.target.checked)}
+                        />
+                        <span>{item.show_in_all_collections ? 'Selected' : 'Not selected'}</span>
                       </label>
                     </TableCell>
                   </TableRow>
@@ -170,7 +209,7 @@ const Collections = () => {
               })}
               {items.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
                     No categories found.
                   </TableCell>
                 </TableRow>

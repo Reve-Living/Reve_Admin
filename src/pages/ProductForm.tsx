@@ -1906,6 +1906,9 @@ const ProductForm = () => {
                   <Plus className="h-4 w-4 mr-2" /> Add Size
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Enter the full price for each size here. The selected size becomes the bed price, and storage/headboard extras are added on top.
+              </p>
               <div className="flex items-center gap-2">
                 <Controller
                   name="show_size_icons"
@@ -1937,7 +1940,7 @@ const ProductForm = () => {
                       type="number"
                       step="0.01"
                       {...register(`sizes.${index}.price_delta` as const, { valueAsNumber: true })}
-                      placeholder="Price delta (e.g. 90)"
+                      placeholder="Full size price (e.g. 249)"
                     />
                     <Input
                       className="col-span-4"

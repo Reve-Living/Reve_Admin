@@ -13,6 +13,7 @@ import {
   Star,
   Image,
   TicketPercent,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -22,6 +23,7 @@ const sidebarLinks = [
   { name: 'Categories', href: '/categories', icon: Layers },
   { name: 'Collections', href: '/collections', icon: Folder },
   { name: 'Hero Slider', href: '/hero-slides', icon: Image },
+  { name: 'Lifestyle Content', href: '/lifestyle-content', icon: BookOpen },
   { name: 'Promotions', href: '/promotions', icon: TicketPercent },
   { name: 'Mattresses', href: '/mattresses', icon: Layers },
   { name: 'Orders', href: '/orders', icon: ShoppingCart },
