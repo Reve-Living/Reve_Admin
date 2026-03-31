@@ -164,6 +164,8 @@ const productSchema = z.object({
                 price_delta: z.number().optional(),
                 size: z.string().optional(),
                 sizes: z.array(z.string()).optional(),
+                use_size_pricing: z.boolean().optional(),
+                size_price_overrides: z.record(z.string(), z.number()).optional(),
               })
             )
             .optional(),
@@ -254,7 +256,16 @@ const productSchema = z.object({
 
 type ProductFormValues = z.infer<typeof productSchema>;
 
-type StyleOptionInput = { label: string; description: string; icon_url?: string; price_delta?: number; size?: string; sizes?: string[] };
+type StyleOptionInput = {
+  label: string;
+  description: string;
+  icon_url?: string;
+  price_delta?: number;
+  size?: string;
+  sizes?: string[];
+  use_size_pricing?: boolean;
+  size_price_overrides?: Record<string, number>;
+};
 type StyleLibraryItem = {
   id: number;
   name: string;
@@ -293,6 +304,24 @@ const parsePriceDeltaFromText = (label = '', description = ''): number => {
   return 0;
 };
 
+const normalizeSizePriceOverrides = (value: unknown): Record<string, number> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.entries(value as Record<string, unknown>).reduce<Record<string, number>>((acc, [key, rawValue]) => {
+    const sizeName = String(key || '').trim();
+    if (!sizeName) return acc;
+    const parsed =
+      typeof rawValue === 'number'
+        ? rawValue
+        : typeof rawValue === 'string' && rawValue.trim() !== ''
+        ? Number(rawValue)
+        : Number.NaN;
+    if (Number.isFinite(parsed)) {
+      acc[sizeName] = parsed;
+    }
+    return acc;
+  }, {});
+};
+
 const normalizeStyleOptions = (options: unknown, includeEmpty = false): StyleOptionInput[] => {
   if (!Array.isArray(options)) return [];
   return (
@@ -329,8 +358,14 @@ const normalizeStyleOptions = (options: unknown, includeEmpty = false): StyleOpt
                   .filter(Boolean)
               : [];
           if (size && !sizes.includes(size)) sizes.push(size);
+          const size_price_overrides = normalizeSizePriceOverrides(
+            (option as { size_price_overrides?: unknown }).size_price_overrides
+          );
+          const use_size_pricing =
+            (option as { use_size_pricing?: unknown }).use_size_pricing === true ||
+            Object.keys(size_price_overrides).length > 0;
           if (!label && !includeEmpty) return null;
-          return { label, description, icon_url, price_delta, size, sizes };
+          return { label, description, icon_url, price_delta, size, sizes, use_size_pricing, size_price_overrides };
         }
         return null;
       })
@@ -743,6 +778,12 @@ const ProductForm = () => {
                   .map((sz) => String(sz || '').trim())
                   .filter(Boolean)
               : o.sizes || [],
+            use_size_pricing:
+              (s.options as any[])?.[idx]?.use_size_pricing === true ||
+              o.use_size_pricing === true,
+            size_price_overrides: normalizeSizePriceOverrides(
+              (s.options as any[])?.[idx]?.size_price_overrides ?? o.size_price_overrides
+            ),
           })),
         }));
         const fabrics = (product.fabrics || []).map((f) => ({
@@ -912,6 +953,8 @@ const ProductForm = () => {
             : o.size
             ? [String(o.size).trim()]
             : [],
+          use_size_pricing: o.use_size_pricing === true || Object.keys(normalizeSizePriceOverrides(o.size_price_overrides)).length > 0,
+          size_price_overrides: normalizeSizePriceOverrides(o.size_price_overrides),
         })),
       }));
       const merged = [...(watch('styles') || []), ...styles];
@@ -1299,6 +1342,8 @@ const ProductForm = () => {
                     : 0,
                   size: (option.size || '').trim(),
                   sizes,
+                  use_size_pricing: option.use_size_pricing === true,
+                  size_price_overrides: normalizeSizePriceOverrides(option.size_price_overrides),
                 };
               })
               .filter((option) => option.label.length > 0);
@@ -1855,6 +1900,10 @@ const ProductForm = () => {
                           : o.size
                           ? [String(o.size).trim()]
                           : [],
+                        use_size_pricing:
+                          o.use_size_pricing === true ||
+                          Object.keys(normalizeSizePriceOverrides(o.size_price_overrides)).length > 0,
+                        size_price_overrides: normalizeSizePriceOverrides(o.size_price_overrides),
                       })),
                     };
                     const merged = [...(watch('styles') || []), newStyle];
@@ -2422,17 +2471,18 @@ const ProductForm = () => {
                   </div>
                   <div className="space-y-2">
                     {normalizeStyleOptions(watch(`styles.${index}.options`), true).map((option, optionIndex) => (
-                      <div key={`${field.id}-option-${optionIndex}`} className="grid grid-cols-12 gap-2 items-start">
-                    <Input
-                      className="col-span-3"
-                      placeholder='Option title (e.g. 2 drawers or 54" Floorstanding)'
-                      value={option.label}
-                      onChange={(e) => {
-                        const current = normalizeStyleOptions(watch(`styles.${index}.options`), true);
-                        current[optionIndex] = { ...current[optionIndex], label: e.target.value };
-                        setValue(`styles.${index}.options`, current);
-                      }}
-                    />
+                      <div key={`${field.id}-option-${optionIndex}`} className="space-y-2 rounded-md border p-3">
+                        <div className="grid grid-cols-12 gap-2 items-start">
+                          <Input
+                            className="col-span-3"
+                            placeholder='Option title (e.g. 2 drawers or 54" Floorstanding)'
+                            value={option.label}
+                            onChange={(e) => {
+                              const current = normalizeStyleOptions(watch(`styles.${index}.options`), true);
+                              current[optionIndex] = { ...current[optionIndex], label: e.target.value };
+                              setValue(`styles.${index}.options`, current);
+                            }}
+                          />
                         <Input
                           className="col-span-3"
                           placeholder="Description (e.g. choose left or right)"
@@ -2473,20 +2523,20 @@ const ProductForm = () => {
                             })}
                           </div>
                         </div>
-                        <Input
-                          className="col-span-2"
-                          placeholder="+Â£0"
-                          type="text"
-                          inputMode="decimal"
-                          value={option.price_delta ?? 0}
-                          onChange={(e) => {
-                            const current = normalizeStyleOptions(watch(`styles.${index}.options`), true);
-                        const raw = e.target.value.replace(/[^0-9.-]/g, '');
-                        const val = raw === '' ? 0 : Number(raw);
-                        current[optionIndex] = { ...current[optionIndex], price_delta: val };
-                        setValue(`styles.${index}.options`, current);
-                      }}
-                    />
+                          <Input
+                            className="col-span-2"
+                            placeholder="+Â£0"
+                            type="text"
+                            inputMode="decimal"
+                            value={option.price_delta ?? 0}
+                            onChange={(e) => {
+                              const current = normalizeStyleOptions(watch(`styles.${index}.options`), true);
+                              const raw = e.target.value.replace(/[^0-9.-]/g, '');
+                              const val = raw === '' ? 0 : Number(raw);
+                              current[optionIndex] = { ...current[optionIndex], price_delta: val };
+                              setValue(`styles.${index}.options`, current);
+                            }}
+                          />
                         <Input
                           className="col-span-3"
                           placeholder="Icon (URL or inline SVG)"
@@ -2520,21 +2570,82 @@ const ProductForm = () => {
                         >
                           Upload
                         </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="col-span-1"
-                          onClick={() => {
-                            const current = normalizeStyleOptions(watch(`styles.${index}.options`), true);
-                            setValue(
-                              `styles.${index}.options`,
-                              current.filter((_, idx) => idx !== optionIndex)
-                            );
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="col-span-1"
+                            onClick={() => {
+                              const current = normalizeStyleOptions(watch(`styles.${index}.options`), true);
+                              setValue(
+                                `styles.${index}.options`,
+                                current.filter((_, idx) => idx !== optionIndex)
+                              );
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                        <label className="flex items-center gap-2 text-sm font-medium">
+                          <input
+                            type="checkbox"
+                            checked={option.use_size_pricing === true}
+                            onChange={(e) => {
+                              const current = normalizeStyleOptions(watch(`styles.${index}.options`), true);
+                              current[optionIndex] = {
+                                ...current[optionIndex],
+                                use_size_pricing: e.target.checked,
+                                size_price_overrides: e.target.checked
+                                  ? normalizeSizePriceOverrides(current[optionIndex].size_price_overrides)
+                                  : {},
+                              };
+                              setValue(`styles.${index}.options`, current);
+                            }}
+                          />
+                          Change price according to selected bed size
+                        </label>
+                        {option.use_size_pricing === true && (
+                          <div className="rounded-md bg-muted/30 p-3">
+                            <p className="mb-2 text-xs text-muted-foreground">
+                              Add a price for each size. These values will override the base option price on the product page.
+                            </p>
+                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                              {(watch('sizes') || []).map((size, sizeIndex) => {
+                                const sizeName = (size.name || '').trim();
+                                if (!sizeName) return null;
+                                const overrides = normalizeSizePriceOverrides(option.size_price_overrides);
+                                return (
+                                  <div key={`${field.id}-option-${optionIndex}-size-${sizeIndex}`} className="grid gap-1">
+                                    <label className="text-xs font-medium text-muted-foreground">{sizeName}</label>
+                                    <Input
+                                      type="text"
+                                      inputMode="decimal"
+                                      placeholder="0"
+                                      value={overrides[sizeName] ?? option.price_delta ?? 0}
+                                      onChange={(e) => {
+                                        const current = normalizeStyleOptions(watch(`styles.${index}.options`), true);
+                                        const raw = e.target.value.replace(/[^0-9.-]/g, '');
+                                        const nextOverrides = normalizeSizePriceOverrides(current[optionIndex].size_price_overrides);
+                                        nextOverrides[sizeName] = raw === '' ? 0 : Number(raw);
+                                        current[optionIndex] = {
+                                          ...current[optionIndex],
+                                          use_size_pricing: true,
+                                          size_price_overrides: nextOverrides,
+                                        };
+                                        setValue(`styles.${index}.options`, current);
+                                      }}
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {(watch('sizes') || []).filter((size) => (size.name || '').trim().length > 0).length === 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                Add product sizes first to enable per-size option pricing.
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

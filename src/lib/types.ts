@@ -149,6 +149,9 @@ export interface ProductStyleOption {
   icon_url?: string;
   price_delta?: number;
   size?: string;
+  sizes?: string[];
+  use_size_pricing?: boolean;
+  size_price_overrides?: Record<string, number>;
 }
 
 export interface ProductFabric {
