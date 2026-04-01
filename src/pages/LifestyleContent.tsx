@@ -18,6 +18,7 @@ type ArticleForm = {
   title: string;
   slug: string;
   description: string;
+  card_image: string;
   image: string;
   article_title: string;
   article_intro: string;
@@ -27,6 +28,7 @@ type ArticleForm = {
     text?: string;
     url?: string;
   }>;
+  article_sections: ArticleSectionBlock[];
   read_more_type: 'none' | 'url' | 'pdf' | 'article';
   read_more_url: string;
   read_more_pdf: string;
@@ -40,6 +42,12 @@ type ArticleContentBlock = {
   url?: string;
 };
 
+type ArticleSectionBlock = {
+  heading: string;
+  text: string;
+  image?: string;
+};
+
 const emptySectionForm: SectionForm = {
   title: 'Transform Your Home',
   subtitle: '',
@@ -50,11 +58,13 @@ const emptyArticleForm: ArticleForm = {
   title: '',
   slug: '',
   description: '',
+  card_image: '',
   image: '',
   article_title: '',
   article_intro: '',
   article_body: '',
   article_content: [],
+  article_sections: [],
   read_more_type: 'none',
   read_more_url: '',
   read_more_pdf: '',
@@ -77,6 +87,22 @@ const normalizeArticleContent = (
       };
     })
     .filter((block): block is ArticleContentBlock => Boolean(block));
+};
+
+const normalizeArticleSections = (
+  value: LifestyleArticle['article_sections'] | ArticleForm['article_sections']
+): ArticleSectionBlock[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((section): ArticleSectionBlock | null => {
+      if (!section || typeof section !== 'object') return null;
+      return {
+        heading: typeof section.heading === 'string' ? section.heading : '',
+        text: typeof section.text === 'string' ? section.text : '',
+        image: typeof section.image === 'string' ? section.image : '',
+      };
+    })
+    .filter((section): section is ArticleSectionBlock => Boolean(section));
 };
 
 const LifestyleContent = () => {
@@ -126,19 +152,37 @@ const LifestyleContent = () => {
     setEditingArticleId(null);
   };
 
-  const handleUpload = async (file: File, field: 'image' | 'read_more_pdf') => {
-    if (field === 'image') setIsUploadingImage(true);
+  const handleUpload = async (file: File, field: 'card_image' | 'image' | 'read_more_pdf') => {
+    if (field === 'image' || field === 'card_image') setIsUploadingImage(true);
     else setIsUploadingPdf(true);
 
     try {
       const res = await apiUpload('/uploads/', file);
       setArticleForm((prev) => ({ ...prev, [field]: res.url }));
-      toast.success(field === 'image' ? 'Image uploaded' : 'PDF uploaded');
+      toast.success(field === 'read_more_pdf' ? 'PDF uploaded' : 'Image uploaded');
     } catch {
-      toast.error(`Failed to upload ${field === 'image' ? 'image' : 'PDF'}`);
+      toast.error(`Failed to upload ${field === 'read_more_pdf' ? 'PDF' : 'image'}`);
     } finally {
-      if (field === 'image') setIsUploadingImage(false);
+      if (field === 'image' || field === 'card_image') setIsUploadingImage(false);
       else setIsUploadingPdf(false);
+    }
+  };
+
+  const handleSectionImageUpload = async (file: File, index: number) => {
+    setIsUploadingImage(true);
+    try {
+      const res = await apiUpload('/uploads/', file);
+      setArticleForm((prev) => ({
+        ...prev,
+        article_sections: prev.article_sections.map((section, sectionIndex) =>
+          sectionIndex === index ? { ...section, image: res.url } : section
+        ),
+      }));
+      toast.success('Section image uploaded');
+    } catch {
+      toast.error('Failed to upload section image');
+    } finally {
+      setIsUploadingImage(false);
     }
   };
 
@@ -175,8 +219,8 @@ const LifestyleContent = () => {
       toast.error('Article title is required');
       return;
     }
-    if (!articleForm.image.trim()) {
-      toast.error('Article image is required');
+    if (!articleForm.card_image.trim()) {
+      toast.error('Homepage card image is required');
       return;
     }
     if (articleForm.read_more_type === 'url' && !articleForm.read_more_url.trim()) {
@@ -187,9 +231,11 @@ const LifestyleContent = () => {
       toast.error('Add a PDF for Read More');
       return;
     }
+    const normalizedArticleSections = normalizeArticleSections(articleForm.article_sections);
     if (articleForm.read_more_type === 'article' && !articleForm.article_body.trim()) {
+      const hasStructuredSections = normalizedArticleSections.length > 0;
       const hasContentBlocks = normalizeArticleContent(articleForm.article_content).length > 0;
-      if (!hasContentBlocks) {
+      if (!hasStructuredSections && !hasContentBlocks) {
         toast.error('Add the full article content');
         return;
       }
@@ -206,12 +252,14 @@ const LifestyleContent = () => {
       title: articleForm.title.trim(),
       slug: articleForm.slug.trim(),
       description: articleForm.description.trim(),
+      card_image: articleForm.card_image.trim(),
       image: articleForm.image.trim(),
       read_more_type: articleForm.read_more_type,
       article_title: articleForm.article_title.trim(),
       article_intro: articleForm.article_intro.trim(),
       article_body: articleForm.article_body.trim() || fallbackArticleBody,
       article_content: normalizedArticleContent,
+      article_sections: normalizedArticleSections,
       read_more_url: articleForm.read_more_url.trim(),
       read_more_pdf: articleForm.read_more_pdf.trim(),
       is_active: articleForm.is_active,
@@ -241,11 +289,13 @@ const LifestyleContent = () => {
       title: article.title || '',
       slug: article.slug || '',
       description: article.description || '',
+      card_image: article.card_image || '',
       image: article.image || '',
       article_title: article.article_title || '',
       article_intro: article.article_intro || '',
       article_body: article.article_body || '',
       article_content: normalizeArticleContent(article.article_content),
+      article_sections: normalizeArticleSections(article.article_sections),
       read_more_type: article.read_more_type || 'none',
       read_more_url: article.read_more_url || '',
       read_more_pdf: article.read_more_pdf || '',
@@ -266,54 +316,43 @@ const LifestyleContent = () => {
     }
   };
 
-  const onUploadFile = (event: ChangeEvent<HTMLInputElement>, field: 'image' | 'read_more_pdf') => {
+  const onUploadFile = (event: ChangeEvent<HTMLInputElement>, field: 'card_image' | 'image' | 'read_more_pdf') => {
     const file = event.target.files?.[0];
     if (file) handleUpload(file, field);
   };
 
-  const updateArticleContentBlock = (
-    index: number,
-    patch: Partial<NonNullable<ArticleForm['article_content'][number]>>
-  ) => {
+  const updateArticleSection = (index: number, patch: Partial<ArticleSectionBlock>) => {
     setArticleForm((prev) => ({
       ...prev,
-      article_content: prev.article_content.map((block, blockIndex) =>
-        blockIndex === index ? { ...block, ...patch } : block
+      article_sections: prev.article_sections.map((section, sectionIndex) =>
+        sectionIndex === index ? { ...section, ...patch } : section
       ),
     }));
   };
 
-  const addArticleContentBlock = (type: 'paragraph' | 'image') => {
+  const addArticleSection = () => {
     setArticleForm((prev) => ({
       ...prev,
-      article_content: [...prev.article_content, type === 'image' ? { type, url: '' } : { type, text: '' }],
+      article_sections: [...prev.article_sections, { heading: '', text: '', image: '' }],
     }));
   };
 
-  const removeArticleContentBlock = (index: number) => {
+  const removeArticleSection = (index: number) => {
     setArticleForm((prev) => ({
       ...prev,
-      article_content: prev.article_content.filter((_, blockIndex) => blockIndex !== index),
+      article_sections: prev.article_sections.filter((_, sectionIndex) => sectionIndex !== index),
     }));
   };
 
-  const moveArticleContentBlock = (index: number, direction: -1 | 1) => {
+  const moveArticleSection = (index: number, direction: -1 | 1) => {
     setArticleForm((prev) => {
       const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= prev.article_content.length) return prev;
-      const articleContent = [...prev.article_content];
-      const [block] = articleContent.splice(index, 1);
-      articleContent.splice(nextIndex, 0, block);
-      return { ...prev, article_content: articleContent };
+      if (nextIndex < 0 || nextIndex >= prev.article_sections.length) return prev;
+      const articleSections = [...prev.article_sections];
+      const [section] = articleSections.splice(index, 1);
+      articleSections.splice(nextIndex, 0, section);
+      return { ...prev, article_sections: articleSections };
     });
-  };
-
-  const useBlocksAsArticleBody = () => {
-    const text = normalizeArticleContent(articleForm.article_content)
-      .filter((block) => block.type === 'paragraph' && block.text?.trim())
-      .map((block) => block.text!.trim())
-      .join('\n\n');
-    setArticleForm((prev) => ({ ...prev, article_body: text }));
   };
 
   return (
@@ -389,7 +428,9 @@ const LifestyleContent = () => {
                   <TableRow key={article.id}>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-3">
-                        {article.image && <img src={article.image} alt="" className="h-12 w-16 rounded object-cover" />}
+                        {(article.card_image || article.image) && (
+                          <img src={article.card_image || article.image} alt="" className="h-12 w-16 rounded object-cover" />
+                        )}
                         <div>
                           <div>{article.title}</div>
                           {article.description && <div className="text-xs text-muted-foreground line-clamp-2">{article.description}</div>}
@@ -497,112 +538,132 @@ const LifestyleContent = () => {
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-espresso">Full Article Content</label>
-            <textarea
-              value={articleForm.article_body}
-              onChange={(e) => setArticleForm((prev) => ({ ...prev, article_body: e.target.value }))}
-              rows={14}
-              className="flex min-h-56 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="Paste the full article here. Use blank lines to separate paragraphs."
-            />
-            <p className="text-xs text-muted-foreground">
-              This content is used on the article page when Read More is set to article page.
-            </p>
-          </div>
-
           <div className="space-y-4 rounded-md border p-4">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <label className="text-sm font-medium text-espresso">Ordered Article Blocks</label>
+                <label className="text-sm font-medium text-espresso">Read More Page Sections</label>
                 <p className="text-xs text-muted-foreground">
-                  Edit every paragraph and image in the exact order shown on the article page.
+                  Build the article page exactly as image + text sections. Each section image here controls what shows after that section heading on the read more page.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => addArticleContentBlock('paragraph')}>
-                  Add Paragraph
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => addArticleContentBlock('image')}>
-                  Add Image
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={useBlocksAsArticleBody}>
-                  Copy Paragraphs To Body
-                </Button>
-              </div>
+              <Button type="button" variant="outline" size="sm" onClick={addArticleSection}>
+                Add Section
+              </Button>
             </div>
 
-            {articleForm.article_content.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No ordered blocks yet.</p>
+            {articleForm.article_sections.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No read more sections yet.</p>
             ) : (
-              <div className="space-y-3">
-                {articleForm.article_content.map((block, index) => (
-                  <div key={`article-block-${index}`} className="space-y-3 rounded-md border bg-muted/20 p-3">
+              <div className="space-y-4">
+                {articleForm.article_sections.map((section, index) => (
+                  <div key={`article-section-${index}`} className="space-y-3 rounded-md border bg-muted/20 p-4">
                     <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-muted-foreground">Block {index + 1}</span>
-                        <select
-                          value={block.type}
-                          onChange={(e) =>
-                            updateArticleContentBlock(index, {
-                              type: e.target.value as 'paragraph' | 'image',
-                              text: e.target.value === 'paragraph' ? block.text || '' : '',
-                              url: e.target.value === 'image' ? block.url || '' : '',
-                            })
-                          }
-                          className="rounded-md border border-input bg-white px-2 py-1 text-sm"
-                        >
-                          <option value="paragraph">Paragraph</option>
-                          <option value="image">Image</option>
-                        </select>
-                      </div>
+                      <span className="text-xs font-medium text-muted-foreground">Section {index + 1}</span>
                       <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => moveArticleContentBlock(index, -1)}>
+                        <Button type="button" variant="outline" size="sm" onClick={() => moveArticleSection(index, -1)}>
                           Up
                         </Button>
-                        <Button type="button" variant="outline" size="sm" onClick={() => moveArticleContentBlock(index, 1)}>
+                        <Button type="button" variant="outline" size="sm" onClick={() => moveArticleSection(index, 1)}>
                           Down
                         </Button>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removeArticleContentBlock(index)}>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => removeArticleSection(index)}>
                           Remove
                         </Button>
                       </div>
                     </div>
 
-                    {block.type === 'paragraph' ? (
-                      <textarea
-                        value={block.text || ''}
-                        onChange={(e) => updateArticleContentBlock(index, { text: e.target.value })}
-                        rows={5}
-                        className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        placeholder="Paragraph text"
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-espresso">Section Heading</label>
+                      <Input
+                        value={section.heading}
+                        onChange={(e) => updateArticleSection(index, { heading: e.target.value })}
+                        placeholder="Size & Room Fit"
                       />
-                    ) : (
-                      <div className="space-y-3">
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-espresso">Section Text</label>
+                      <textarea
+                        value={section.text}
+                        onChange={(e) => updateArticleSection(index, { text: e.target.value })}
+                        rows={6}
+                        className="flex min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        placeholder="Section copy"
+                      />
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-[2fr,1fr]">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium text-espresso">Section Image</label>
                         <Input
-                          value={block.url || ''}
-                          onChange={(e) => updateArticleContentBlock(index, { url: e.target.value })}
-                          placeholder="Image URL"
+                          value={section.image || ''}
+                          onChange={(e) => updateArticleSection(index, { image: e.target.value })}
+                          placeholder="Paste image URL here, or upload from computer below"
                         />
-                        {block.url ? <img src={block.url} alt={`Block ${index + 1}`} className="max-h-64 rounded object-cover" /> : null}
+                        <input
+                          type="file"
+                          accept={IMAGE_UPLOAD_ACCEPT}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleSectionImageUpload(file, index);
+                          }}
+                          disabled={isUploadingImage}
+                          className="text-sm"
+                        />
                       </div>
-                    )}
+                      {section.image ? <img src={section.image} alt={`Section ${index + 1}`} className="h-40 w-full rounded object-cover" /> : null}
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-espresso">Fallback Article Body</label>
+            <textarea
+              value={articleForm.article_body}
+              onChange={(e) => setArticleForm((prev) => ({ ...prev, article_body: e.target.value }))}
+              rows={8}
+              className="flex min-h-40 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="Optional fallback content for older article layouts."
+            />
+          </div>
+
           <div className="grid gap-4 md:grid-cols-[2fr,1fr]">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Article Image</label>
+              <label className="text-sm font-medium text-espresso">Homepage Card Image</label>
+              <Input
+                value={articleForm.card_image}
+                onChange={(e) => setArticleForm((prev) => ({ ...prev, card_image: e.target.value }))}
+                placeholder="Paste the image URL shown on the homepage card"
+              />
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Choose homepage image from computer</label>
+                <input
+                  type="file"
+                  accept={IMAGE_UPLOAD_ACCEPT}
+                  onChange={(e) => onUploadFile(e, 'card_image')}
+                  disabled={isUploadingImage}
+                  className="text-sm"
+                />
+              </div>
+            </div>
+            {articleForm.card_image && (
+              <img src={articleForm.card_image} alt="Homepage card preview" className="h-40 w-full rounded object-cover" />
+            )}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-[2fr,1fr]">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso">Article Header Image</label>
               <Input
                 value={articleForm.image}
                 onChange={(e) => setArticleForm((prev) => ({ ...prev, image: e.target.value }))}
-                placeholder="Paste image URL here, or upload from computer below"
+                placeholder="Paste the image URL shown at the top of the full article page"
               />
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Choose image from computer</label>
+                <label className="text-xs font-medium text-muted-foreground">Choose article header image from computer</label>
                 <input
                   type="file"
                   accept={IMAGE_UPLOAD_ACCEPT}
@@ -611,11 +672,17 @@ const LifestyleContent = () => {
                   className="text-sm"
                 />
                 <p className="text-xs text-muted-foreground">
-                  You can either paste an image URL or choose a file from your computer.
+                  Leave this blank if you want the article page to reuse the homepage card image.
                 </p>
               </div>
             </div>
-            {articleForm.image && <img src={articleForm.image} alt="Preview" className="h-40 w-full rounded object-cover" />}
+            {(articleForm.image || articleForm.card_image) && (
+              <img
+                src={articleForm.image || articleForm.card_image}
+                alt="Article header preview"
+                className="h-40 w-full rounded object-cover"
+              />
+            )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">

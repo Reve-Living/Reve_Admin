@@ -67,6 +67,7 @@ export interface LifestyleArticle {
   title: string;
   slug?: string;
   description?: string;
+  card_image?: string;
   image?: string;
   article_title?: string;
   article_intro?: string;
@@ -75,6 +76,11 @@ export interface LifestyleArticle {
     type: 'paragraph' | 'image';
     text?: string;
     url?: string;
+  }>;
+  article_sections?: Array<{
+    heading: string;
+    text: string;
+    image?: string;
   }>;
   read_more_type?: 'none' | 'url' | 'pdf' | 'article';
   read_more_url?: string;
@@ -85,6 +91,7 @@ export interface LifestyleArticle {
     title: string;
     slug: string;
     description?: string;
+    card_image?: string;
     image?: string;
     read_more_target?: string;
   }>;
