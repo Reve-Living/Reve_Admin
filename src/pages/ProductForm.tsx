@@ -380,6 +380,24 @@ const normalizeStoredSizePrice = (productBasePrice: number, storedValue?: number
   return raw;
 };
 
+const buildSizePriceOverrideSeed = (
+  sizes: Array<{ name?: string }>,
+  existingOverrides: Record<string, number>,
+  fallbackPrice: number
+): Record<string, number> => {
+  const seededOverrides = { ...existingOverrides };
+
+  sizes.forEach((size) => {
+    const sizeName = String(size?.name || '').trim();
+    if (!sizeName) return;
+    if (!(sizeName in seededOverrides)) {
+      seededOverrides[sizeName] = fallbackPrice;
+    }
+  });
+
+  return seededOverrides;
+};
+
 const ProductForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -2523,20 +2541,26 @@ const ProductForm = () => {
                             })}
                           </div>
                         </div>
-                          <Input
-                            className="col-span-2"
-                            placeholder="+Â£0"
-                            type="text"
-                            inputMode="decimal"
-                            value={option.price_delta ?? 0}
-                            onChange={(e) => {
-                              const current = normalizeStyleOptions(watch(`styles.${index}.options`), true);
-                              const raw = e.target.value.replace(/[^0-9.-]/g, '');
-                              const val = raw === '' ? 0 : Number(raw);
-                              current[optionIndex] = { ...current[optionIndex], price_delta: val };
-                              setValue(`styles.${index}.options`, current);
-                            }}
-                          />
+                          {option.use_size_pricing === true ? (
+                            <div className="col-span-2 flex h-10 items-center rounded-md border border-dashed px-3 text-sm text-muted-foreground">
+                              Ignored while size pricing is enabled
+                            </div>
+                          ) : (
+                            <Input
+                              className="col-span-2"
+                              placeholder="+Â£0"
+                              type="text"
+                              inputMode="decimal"
+                              value={option.price_delta ?? 0}
+                              onChange={(e) => {
+                                const current = normalizeStyleOptions(watch(`styles.${index}.options`), true);
+                                const raw = e.target.value.replace(/[^0-9.-]/g, '');
+                                const val = raw === '' ? 0 : Number(raw);
+                                current[optionIndex] = { ...current[optionIndex], price_delta: val };
+                                setValue(`styles.${index}.options`, current);
+                              }}
+                            />
+                          )}
                         <Input
                           className="col-span-3"
                           placeholder="Icon (URL or inline SVG)"
@@ -2592,11 +2616,16 @@ const ProductForm = () => {
                             checked={option.use_size_pricing === true}
                             onChange={(e) => {
                               const current = normalizeStyleOptions(watch(`styles.${index}.options`), true);
+                              const nextUseSizePricing = e.target.checked;
+                              const existingOverrides = normalizeSizePriceOverrides(current[optionIndex].size_price_overrides);
+                              const fallbackPrice = Number.isFinite(Number(current[optionIndex].price_delta))
+                                ? Number(current[optionIndex].price_delta)
+                                : 0;
                               current[optionIndex] = {
                                 ...current[optionIndex],
-                                use_size_pricing: e.target.checked,
-                                size_price_overrides: e.target.checked
-                                  ? normalizeSizePriceOverrides(current[optionIndex].size_price_overrides)
+                                use_size_pricing: nextUseSizePricing,
+                                size_price_overrides: nextUseSizePricing
+                                  ? buildSizePriceOverrideSeed(watch('sizes') || [], existingOverrides, fallbackPrice)
                                   : {},
                               };
                               setValue(`styles.${index}.options`, current);
@@ -2614,6 +2643,7 @@ const ProductForm = () => {
                                 const sizeName = (size.name || '').trim();
                                 if (!sizeName) return null;
                                 const overrides = normalizeSizePriceOverrides(option.size_price_overrides);
+                                const hasExplicitOverride = Object.prototype.hasOwnProperty.call(overrides, sizeName);
                                 return (
                                   <div key={`${field.id}-option-${optionIndex}-size-${sizeIndex}`} className="grid gap-1">
                                     <label className="text-xs font-medium text-muted-foreground">{sizeName}</label>
@@ -2621,12 +2651,16 @@ const ProductForm = () => {
                                       type="text"
                                       inputMode="decimal"
                                       placeholder="0"
-                                      value={overrides[sizeName] ?? option.price_delta ?? 0}
+                                      value={hasExplicitOverride ? overrides[sizeName] : ''}
                                       onChange={(e) => {
                                         const current = normalizeStyleOptions(watch(`styles.${index}.options`), true);
                                         const raw = e.target.value.replace(/[^0-9.-]/g, '');
                                         const nextOverrides = normalizeSizePriceOverrides(current[optionIndex].size_price_overrides);
-                                        nextOverrides[sizeName] = raw === '' ? 0 : Number(raw);
+                                        if (raw === '') {
+                                          delete nextOverrides[sizeName];
+                                        } else {
+                                          nextOverrides[sizeName] = Number(raw);
+                                        }
                                         current[optionIndex] = {
                                           ...current[optionIndex],
                                           use_size_pricing: true,
