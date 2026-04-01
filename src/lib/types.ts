@@ -65,12 +65,29 @@ export interface LifestyleArticle {
   id?: number;
   section: number;
   title: string;
+  slug?: string;
   description?: string;
   image?: string;
-  read_more_type?: 'none' | 'url' | 'pdf';
+  article_title?: string;
+  article_intro?: string;
+  article_body?: string;
+  article_content?: Array<{
+    type: 'paragraph' | 'image';
+    text?: string;
+    url?: string;
+  }>;
+  read_more_type?: 'none' | 'url' | 'pdf' | 'article';
   read_more_url?: string;
   read_more_pdf?: string;
   read_more_target?: string;
+  related_articles?: Array<{
+    id: number;
+    title: string;
+    slug: string;
+    description?: string;
+    image?: string;
+    read_more_target?: string;
+  }>;
   is_active?: boolean;
   sort_order?: number;
   created_at?: string;

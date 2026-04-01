@@ -16,13 +16,28 @@ type SectionForm = {
 
 type ArticleForm = {
   title: string;
+  slug: string;
   description: string;
   image: string;
-  read_more_type: 'none' | 'url' | 'pdf';
+  article_title: string;
+  article_intro: string;
+  article_body: string;
+  article_content: Array<{
+    type: 'paragraph' | 'image';
+    text?: string;
+    url?: string;
+  }>;
+  read_more_type: 'none' | 'url' | 'pdf' | 'article';
   read_more_url: string;
   read_more_pdf: string;
   is_active: boolean;
   sort_order: number;
+};
+
+type ArticleContentBlock = {
+  type: 'paragraph' | 'image';
+  text?: string;
+  url?: string;
 };
 
 const emptySectionForm: SectionForm = {
@@ -33,13 +48,35 @@ const emptySectionForm: SectionForm = {
 
 const emptyArticleForm: ArticleForm = {
   title: '',
+  slug: '',
   description: '',
   image: '',
+  article_title: '',
+  article_intro: '',
+  article_body: '',
+  article_content: [],
   read_more_type: 'none',
   read_more_url: '',
   read_more_pdf: '',
   is_active: true,
   sort_order: 0,
+};
+
+const normalizeArticleContent = (
+  value: LifestyleArticle['article_content'] | ArticleForm['article_content']
+): ArticleContentBlock[] => {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((block): ArticleContentBlock | null => {
+      if (!block || typeof block !== 'object') return null;
+      const type = block.type === 'image' ? 'image' : 'paragraph';
+      return {
+        type,
+        text: typeof block.text === 'string' ? block.text : '',
+        url: typeof block.url === 'string' ? block.url : '',
+      };
+    })
+    .filter((block): block is ArticleContentBlock => Boolean(block));
 };
 
 const LifestyleContent = () => {
@@ -150,14 +187,31 @@ const LifestyleContent = () => {
       toast.error('Add a PDF for Read More');
       return;
     }
+    if (articleForm.read_more_type === 'article' && !articleForm.article_body.trim()) {
+      const hasContentBlocks = normalizeArticleContent(articleForm.article_content).length > 0;
+      if (!hasContentBlocks) {
+        toast.error('Add the full article content');
+        return;
+      }
+    }
 
     setIsSavingArticle(true);
+    const normalizedArticleContent = normalizeArticleContent(articleForm.article_content);
+    const fallbackArticleBody = normalizedArticleContent
+      .filter((block) => block.type === 'paragraph' && block.text?.trim())
+      .map((block) => block.text!.trim())
+      .join('\n\n');
     const payload = {
       section: sectionId,
       title: articleForm.title.trim(),
+      slug: articleForm.slug.trim(),
       description: articleForm.description.trim(),
       image: articleForm.image.trim(),
       read_more_type: articleForm.read_more_type,
+      article_title: articleForm.article_title.trim(),
+      article_intro: articleForm.article_intro.trim(),
+      article_body: articleForm.article_body.trim() || fallbackArticleBody,
+      article_content: normalizedArticleContent,
       read_more_url: articleForm.read_more_url.trim(),
       read_more_pdf: articleForm.read_more_pdf.trim(),
       is_active: articleForm.is_active,
@@ -185,8 +239,13 @@ const LifestyleContent = () => {
     setEditingArticleId(article.id || null);
     setArticleForm({
       title: article.title || '',
+      slug: article.slug || '',
       description: article.description || '',
       image: article.image || '',
+      article_title: article.article_title || '',
+      article_intro: article.article_intro || '',
+      article_body: article.article_body || '',
+      article_content: normalizeArticleContent(article.article_content),
       read_more_type: article.read_more_type || 'none',
       read_more_url: article.read_more_url || '',
       read_more_pdf: article.read_more_pdf || '',
@@ -212,13 +271,58 @@ const LifestyleContent = () => {
     if (file) handleUpload(file, field);
   };
 
+  const updateArticleContentBlock = (
+    index: number,
+    patch: Partial<NonNullable<ArticleForm['article_content'][number]>>
+  ) => {
+    setArticleForm((prev) => ({
+      ...prev,
+      article_content: prev.article_content.map((block, blockIndex) =>
+        blockIndex === index ? { ...block, ...patch } : block
+      ),
+    }));
+  };
+
+  const addArticleContentBlock = (type: 'paragraph' | 'image') => {
+    setArticleForm((prev) => ({
+      ...prev,
+      article_content: [...prev.article_content, type === 'image' ? { type, url: '' } : { type, text: '' }],
+    }));
+  };
+
+  const removeArticleContentBlock = (index: number) => {
+    setArticleForm((prev) => ({
+      ...prev,
+      article_content: prev.article_content.filter((_, blockIndex) => blockIndex !== index),
+    }));
+  };
+
+  const moveArticleContentBlock = (index: number, direction: -1 | 1) => {
+    setArticleForm((prev) => {
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= prev.article_content.length) return prev;
+      const articleContent = [...prev.article_content];
+      const [block] = articleContent.splice(index, 1);
+      articleContent.splice(nextIndex, 0, block);
+      return { ...prev, article_content: articleContent };
+    });
+  };
+
+  const useBlocksAsArticleBody = () => {
+    const text = normalizeArticleContent(articleForm.article_content)
+      .filter((block) => block.type === 'paragraph' && block.text?.trim())
+      .map((block) => block.text!.trim())
+      .join('\n\n');
+    setArticleForm((prev) => ({ ...prev, article_body: text }));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-espresso">Lifestyle Content</h1>
           <p className="text-sm text-muted-foreground">
-            Manage the homepage "Transform Your Home" title, subtitle, and the two Read More article blocks.
+            Manage the homepage Transform Your Home cards and the full article pages they can open into.
           </p>
         </div>
         <Button variant="outline" onClick={resetArticleForm}>
@@ -268,7 +372,7 @@ const LifestyleContent = () => {
         </CardHeader>
         <CardContent>
           {articles.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No articles yet. Add up to 2 active ones for the homepage layout.</p>
+            <p className="text-sm text-muted-foreground">No articles yet. Active articles can appear on the homepage and open into full article pages.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -293,7 +397,13 @@ const LifestyleContent = () => {
                       </div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {article.read_more_type === 'pdf' ? 'PDF' : article.read_more_type === 'url' ? 'URL' : 'None'}
+                      {article.read_more_type === 'pdf'
+                        ? 'PDF'
+                        : article.read_more_type === 'url'
+                        ? 'URL'
+                        : article.read_more_type === 'article'
+                        ? 'Article page'
+                        : 'None'}
                     </TableCell>
                     <TableCell>{article.is_active !== false ? 'Active' : 'Inactive'}</TableCell>
                     <TableCell>{article.sort_order || 0}</TableCell>
@@ -330,6 +440,16 @@ const LifestyleContent = () => {
           </div>
 
           <div className="space-y-2">
+            <label className="text-sm font-medium text-espresso">Slug</label>
+            <Input
+              value={articleForm.slug}
+              onChange={(e) => setArticleForm((prev) => ({ ...prev, slug: e.target.value }))}
+              placeholder="choose-the-right-bed-for-your-space"
+            />
+            <p className="text-xs text-muted-foreground">You can edit the article URL slug here.</p>
+          </div>
+
+          <div className="space-y-2">
             <label className="text-sm font-medium text-espresso">Description</label>
             <textarea
               value={articleForm.description}
@@ -338,6 +458,139 @@ const LifestyleContent = () => {
               className="flex min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               placeholder="Add the article summary text shown beside the image."
             />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso">Article Page Title</label>
+              <Input
+                value={articleForm.article_title}
+                onChange={(e) => setArticleForm((prev) => ({ ...prev, article_title: e.target.value }))}
+                placeholder="Optional. Defaults to the article title."
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso">Read More Button Type</label>
+              <select
+                value={articleForm.read_more_type}
+                onChange={(e) =>
+                  setArticleForm((prev) => ({ ...prev, read_more_type: e.target.value as 'none' | 'url' | 'pdf' | 'article' }))
+                }
+                className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+              >
+                <option value="none">No button</option>
+                <option value="article">Open article page</option>
+                <option value="url">Open URL</option>
+                <option value="pdf">Open PDF</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-espresso">Article Page Intro</label>
+            <textarea
+              value={articleForm.article_intro}
+              onChange={(e) => setArticleForm((prev) => ({ ...prev, article_intro: e.target.value }))}
+              rows={4}
+              className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="Short intro shown near the top of the full article page."
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-espresso">Full Article Content</label>
+            <textarea
+              value={articleForm.article_body}
+              onChange={(e) => setArticleForm((prev) => ({ ...prev, article_body: e.target.value }))}
+              rows={14}
+              className="flex min-h-56 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              placeholder="Paste the full article here. Use blank lines to separate paragraphs."
+            />
+            <p className="text-xs text-muted-foreground">
+              This content is used on the article page when Read More is set to article page.
+            </p>
+          </div>
+
+          <div className="space-y-4 rounded-md border p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <label className="text-sm font-medium text-espresso">Ordered Article Blocks</label>
+                <p className="text-xs text-muted-foreground">
+                  Edit every paragraph and image in the exact order shown on the article page.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => addArticleContentBlock('paragraph')}>
+                  Add Paragraph
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => addArticleContentBlock('image')}>
+                  Add Image
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={useBlocksAsArticleBody}>
+                  Copy Paragraphs To Body
+                </Button>
+              </div>
+            </div>
+
+            {articleForm.article_content.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No ordered blocks yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {articleForm.article_content.map((block, index) => (
+                  <div key={`article-block-${index}`} className="space-y-3 rounded-md border bg-muted/20 p-3">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-muted-foreground">Block {index + 1}</span>
+                        <select
+                          value={block.type}
+                          onChange={(e) =>
+                            updateArticleContentBlock(index, {
+                              type: e.target.value as 'paragraph' | 'image',
+                              text: e.target.value === 'paragraph' ? block.text || '' : '',
+                              url: e.target.value === 'image' ? block.url || '' : '',
+                            })
+                          }
+                          className="rounded-md border border-input bg-white px-2 py-1 text-sm"
+                        >
+                          <option value="paragraph">Paragraph</option>
+                          <option value="image">Image</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={() => moveArticleContentBlock(index, -1)}>
+                          Up
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => moveArticleContentBlock(index, 1)}>
+                          Down
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => removeArticleContentBlock(index)}>
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+
+                    {block.type === 'paragraph' ? (
+                      <textarea
+                        value={block.text || ''}
+                        onChange={(e) => updateArticleContentBlock(index, { text: e.target.value })}
+                        rows={5}
+                        className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        placeholder="Paragraph text"
+                      />
+                    ) : (
+                      <div className="space-y-3">
+                        <Input
+                          value={block.url || ''}
+                          onChange={(e) => updateArticleContentBlock(index, { url: e.target.value })}
+                          placeholder="Image URL"
+                        />
+                        {block.url ? <img src={block.url} alt={`Block ${index + 1}`} className="max-h-64 rounded object-cover" /> : null}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-[2fr,1fr]">
@@ -367,20 +620,9 @@ const LifestyleContent = () => {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Read More Button Type</label>
-              <select
-                value={articleForm.read_more_type}
-                onChange={(e) =>
-                  setArticleForm((prev) => ({ ...prev, read_more_type: e.target.value as 'none' | 'url' | 'pdf' }))
-                }
-                className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
-              >
-                <option value="none">No button</option>
-                <option value="url">Open URL</option>
-                <option value="pdf">Open PDF</option>
-              </select>
+              <label className="text-sm font-medium text-espresso">Read More Behaviour</label>
               <p className="text-xs text-muted-foreground">
-                Choose whether the Read More button should open a web link or a PDF file.
+                Use article page for full on-site articles, or choose URL/PDF to open an external link or document.
               </p>
             </div>
             <label className="flex items-center gap-2 text-sm font-medium text-espresso md:self-end">
@@ -405,6 +647,20 @@ const LifestyleContent = () => {
               <p className="text-xs text-muted-foreground">
                 Paste the URL the customer should open when clicking Read More.
               </p>
+            </div>
+          )}
+
+          {articleForm.read_more_type === 'article' && (
+            <div className="space-y-2 rounded-md border border-dashed p-3">
+              <label className="text-sm font-medium text-espresso">Article Page Preview Link</label>
+              <p className="text-xs text-muted-foreground">
+                After saving, this article will open on its own page and show related article suggestions automatically at the end.
+              </p>
+              {editingArticleId && articleForm.title.trim() ? (
+                <p className="text-xs text-muted-foreground">
+                  URL will look like: `/transform-your-home/...`
+                </p>
+              ) : null}
             </div>
           )}
 
