@@ -43,6 +43,7 @@ type ArticleContentBlock = {
 };
 
 type ArticleSectionBlock = {
+  sort_order: number;
   heading: string;
   text: string;
   image?: string;
@@ -94,15 +95,19 @@ const normalizeArticleSections = (
 ): ArticleSectionBlock[] => {
   if (!Array.isArray(value)) return [];
   return value
-    .map((section): ArticleSectionBlock | null => {
+    .map((section, index): ArticleSectionBlock | null => {
       if (!section || typeof section !== 'object') return null;
       return {
+        sort_order: Number.isFinite(Number((section as { sort_order?: unknown }).sort_order))
+          ? Number((section as { sort_order?: unknown }).sort_order)
+          : index + 1,
         heading: typeof section.heading === 'string' ? section.heading : '',
         text: typeof section.text === 'string' ? section.text : '',
         image: typeof section.image === 'string' ? section.image : '',
       };
     })
-    .filter((section): section is ArticleSectionBlock => Boolean(section));
+    .filter((section): section is ArticleSectionBlock => Boolean(section))
+    .sort((a, b) => a.sort_order - b.sort_order);
 };
 
 const LifestyleContent = () => {
@@ -333,7 +338,10 @@ const LifestyleContent = () => {
   const addArticleSection = () => {
     setArticleForm((prev) => ({
       ...prev,
-      article_sections: [...prev.article_sections, { heading: '', text: '', image: '' }],
+      article_sections: [
+        ...prev.article_sections,
+        { sort_order: prev.article_sections.length + 1, heading: '', text: '', image: '' },
+      ],
     }));
   };
 
@@ -342,17 +350,6 @@ const LifestyleContent = () => {
       ...prev,
       article_sections: prev.article_sections.filter((_, sectionIndex) => sectionIndex !== index),
     }));
-  };
-
-  const moveArticleSection = (index: number, direction: -1 | 1) => {
-    setArticleForm((prev) => {
-      const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= prev.article_sections.length) return prev;
-      const articleSections = [...prev.article_sections];
-      const [section] = articleSections.splice(index, 1);
-      articleSections.splice(nextIndex, 0, section);
-      return { ...prev, article_sections: articleSections };
-    });
   };
 
   return (
@@ -560,16 +557,23 @@ const LifestyleContent = () => {
                     <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <span className="text-xs font-medium text-muted-foreground">Read More Section {index + 1}</span>
                       <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => moveArticleSection(index, -1)}>
-                          Up
-                        </Button>
-                        <Button type="button" variant="outline" size="sm" onClick={() => moveArticleSection(index, 1)}>
-                          Down
-                        </Button>
                         <Button type="button" variant="ghost" size="sm" onClick={() => removeArticleSection(index)}>
                           Remove
                         </Button>
                       </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-espresso">Section Order</label>
+                      <Input
+                        type="number"
+                        value={section.sort_order}
+                        onChange={(e) => updateArticleSection(index, { sort_order: Number(e.target.value) || 0 })}
+                        placeholder="1"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Smaller number shows first on the read more page.
+                      </p>
                     </div>
 
                     <div className="space-y-2">
@@ -617,17 +621,6 @@ const LifestyleContent = () => {
                 ))}
               </div>
             )}
-          </div>
-
-          <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Extra Text Only Body</label>
-            <textarea
-              value={articleForm.article_body}
-              onChange={(e) => setArticleForm((prev) => ({ ...prev, article_body: e.target.value }))}
-              rows={8}
-              className="flex min-h-40 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="Optional. Only use this if you want extra plain text instead of section blocks."
-            />
           </div>
 
           <div className="grid gap-4 md:grid-cols-[2fr,1fr]">

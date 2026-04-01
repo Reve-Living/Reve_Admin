@@ -78,6 +78,7 @@ export interface LifestyleArticle {
     url?: string;
   }>;
   article_sections?: Array<{
+    sort_order?: number;
     heading: string;
     text: string;
     image?: string;
