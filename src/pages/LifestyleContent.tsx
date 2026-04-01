@@ -361,7 +361,7 @@ const LifestyleContent = () => {
         <div>
           <h1 className="text-2xl font-semibold text-espresso">Lifestyle Content</h1>
           <p className="text-sm text-muted-foreground">
-            Manage the homepage Transform Your Home cards and the full article pages they can open into.
+            Manage the homepage top intro, the two homepage cards, and the full read more pages.
           </p>
         </div>
         <Button variant="outline" onClick={resetArticleForm}>
@@ -371,12 +371,12 @@ const LifestyleContent = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>Section Heading</CardTitle>
+          <CardTitle>Homepage Top Section</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Title</label>
+              <label className="text-sm font-medium text-espresso">Homepage Heading</label>
               <Input value={sectionForm.title} onChange={(e) => setSectionForm((prev) => ({ ...prev, title: e.target.value }))} />
             </div>
             <label className="flex items-center gap-2 text-sm font-medium text-espresso md:self-end">
@@ -386,17 +386,17 @@ const LifestyleContent = () => {
                 onChange={(e) => setSectionForm((prev) => ({ ...prev, is_active: e.target.checked }))}
                 className="h-4 w-4"
               />
-              Show this section on site
+              Show this section on the homepage
             </label>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-espresso">Subtitle</label>
+            <label className="text-sm font-medium text-espresso">Top Intro Text</label>
             <textarea
               value={sectionForm.subtitle}
               onChange={(e) => setSectionForm((prev) => ({ ...prev, subtitle: e.target.value }))}
               rows={3}
               className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="Add the line that appears under the section title."
+              placeholder="Add the intro text shown under the homepage heading."
             />
           </div>
           <Button onClick={handleSaveSection} disabled={isSavingSection}>
@@ -411,7 +411,7 @@ const LifestyleContent = () => {
         </CardHeader>
         <CardContent>
           {articles.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No articles yet. Active articles can appear on the homepage and open into full article pages.</p>
+            <p className="text-sm text-muted-foreground">No cards yet. Active entries will show on the homepage and open into full read more pages.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -466,52 +466,52 @@ const LifestyleContent = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle>{editingArticleId ? 'Edit Article' : 'New Article'}</CardTitle>
+          <CardTitle>{editingArticleId ? 'Edit Homepage Card + Read More Page' : 'New Homepage Card + Read More Page'}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Article Title</label>
+              <label className="text-sm font-medium text-espresso">Homepage Card Title</label>
               <Input value={articleForm.title} onChange={(e) => setArticleForm((prev) => ({ ...prev, title: e.target.value }))} />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Sort Order</label>
+              <label className="text-sm font-medium text-espresso">Homepage Card Order</label>
               <Input type="number" value={articleForm.sort_order} onChange={(e) => setArticleForm((prev) => ({ ...prev, sort_order: Number(e.target.value) || 0 }))} />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-espresso">Slug</label>
+            <label className="text-sm font-medium text-espresso">Read More Page URL Slug</label>
             <Input
               value={articleForm.slug}
               onChange={(e) => setArticleForm((prev) => ({ ...prev, slug: e.target.value }))}
               placeholder="choose-the-right-bed-for-your-space"
             />
-            <p className="text-xs text-muted-foreground">You can edit the article URL slug here.</p>
+            <p className="text-xs text-muted-foreground">This controls the end part of the read more page link.</p>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-espresso">Description</label>
+            <label className="text-sm font-medium text-espresso">Homepage Card Text</label>
             <textarea
               value={articleForm.description}
               onChange={(e) => setArticleForm((prev) => ({ ...prev, description: e.target.value }))}
               rows={6}
               className="flex min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="Add the article summary text shown beside the image."
+              placeholder="Add the short text shown on the homepage card."
             />
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Article Page Title</label>
+              <label className="text-sm font-medium text-espresso">Read More Page Heading</label>
               <Input
                 value={articleForm.article_title}
                 onChange={(e) => setArticleForm((prev) => ({ ...prev, article_title: e.target.value }))}
-                placeholder="Optional. Defaults to the article title."
+                placeholder="Main heading shown at the top of the read more page."
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Read More Button Type</label>
+              <label className="text-sm font-medium text-espresso">Read More Button Action</label>
               <select
                 value={articleForm.read_more_type}
                 onChange={(e) =>
@@ -528,13 +528,13 @@ const LifestyleContent = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-espresso">Article Page Intro</label>
+            <label className="text-sm font-medium text-espresso">Read More Page Intro</label>
             <textarea
               value={articleForm.article_intro}
               onChange={(e) => setArticleForm((prev) => ({ ...prev, article_intro: e.target.value }))}
               rows={4}
               className="flex min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="Short intro shown near the top of the full article page."
+              placeholder="Intro text shown under the read more page heading."
             />
           </div>
 
@@ -543,7 +543,7 @@ const LifestyleContent = () => {
               <div>
                 <label className="text-sm font-medium text-espresso">Read More Page Sections</label>
                 <p className="text-xs text-muted-foreground">
-                  Build the article page exactly as image + text sections. Each section image here controls what shows after that section heading on the read more page.
+                  Add the sections shown lower down on the read more page. Each section needs a heading, text, and its own image.
                 </p>
               </div>
               <Button type="button" variant="outline" size="sm" onClick={addArticleSection}>
@@ -552,13 +552,13 @@ const LifestyleContent = () => {
             </div>
 
             {articleForm.article_sections.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No read more sections yet.</p>
+              <p className="text-sm text-muted-foreground">No read more sections added yet.</p>
             ) : (
               <div className="space-y-4">
                 {articleForm.article_sections.map((section, index) => (
                   <div key={`article-section-${index}`} className="space-y-3 rounded-md border bg-muted/20 p-4">
                     <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Section {index + 1}</span>
+                      <span className="text-xs font-medium text-muted-foreground">Read More Section {index + 1}</span>
                       <div className="flex flex-wrap gap-2">
                         <Button type="button" variant="outline" size="sm" onClick={() => moveArticleSection(index, -1)}>
                           Up
@@ -577,7 +577,7 @@ const LifestyleContent = () => {
                       <Input
                         value={section.heading}
                         onChange={(e) => updateArticleSection(index, { heading: e.target.value })}
-                        placeholder="Size & Room Fit"
+                        placeholder="Example: Size & Room Fit"
                       />
                     </div>
 
@@ -588,7 +588,7 @@ const LifestyleContent = () => {
                         onChange={(e) => updateArticleSection(index, { text: e.target.value })}
                         rows={6}
                         className="flex min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        placeholder="Section copy"
+                        placeholder="Text shown for this read more section"
                       />
                     </div>
 
@@ -598,7 +598,7 @@ const LifestyleContent = () => {
                         <Input
                           value={section.image || ''}
                           onChange={(e) => updateArticleSection(index, { image: e.target.value })}
-                          placeholder="Paste image URL here, or upload from computer below"
+                          placeholder="Paste the image URL for this section, or upload below"
                         />
                         <input
                           type="file"
@@ -620,26 +620,26 @@ const LifestyleContent = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-espresso">Fallback Article Body</label>
+              <label className="text-sm font-medium text-espresso">Extra Text Only Body</label>
             <textarea
               value={articleForm.article_body}
               onChange={(e) => setArticleForm((prev) => ({ ...prev, article_body: e.target.value }))}
               rows={8}
               className="flex min-h-40 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              placeholder="Optional fallback content for older article layouts."
+              placeholder="Optional. Only use this if you want extra plain text instead of section blocks."
             />
           </div>
 
           <div className="grid gap-4 md:grid-cols-[2fr,1fr]">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Homepage Card Image</label>
+              <label className="text-sm font-medium text-espresso">Home Image</label>
               <Input
                 value={articleForm.card_image}
                 onChange={(e) => setArticleForm((prev) => ({ ...prev, card_image: e.target.value }))}
-                placeholder="Paste the image URL shown on the homepage card"
+                placeholder="Image shown on the homepage card"
               />
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Choose homepage image from computer</label>
+                <label className="text-xs font-medium text-muted-foreground">Upload home image</label>
                 <input
                   type="file"
                   accept={IMAGE_UPLOAD_ACCEPT}
@@ -656,14 +656,14 @@ const LifestyleContent = () => {
 
           <div className="grid gap-4 md:grid-cols-[2fr,1fr]">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Article Header Image</label>
+              <label className="text-sm font-medium text-espresso">Read More Top Image</label>
               <Input
                 value={articleForm.image}
                 onChange={(e) => setArticleForm((prev) => ({ ...prev, image: e.target.value }))}
-                placeholder="Paste the image URL shown at the top of the full article page"
+                placeholder="Image shown at the top of the read more page"
               />
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Choose article header image from computer</label>
+                <label className="text-xs font-medium text-muted-foreground">Upload read more top image</label>
                 <input
                   type="file"
                   accept={IMAGE_UPLOAD_ACCEPT}
@@ -672,7 +672,7 @@ const LifestyleContent = () => {
                   className="text-sm"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Leave this blank if you want the article page to reuse the homepage card image.
+                  Leave this empty if you want the read more page to use the same image as the homepage card.
                 </p>
               </div>
             </div>
@@ -687,9 +687,9 @@ const LifestyleContent = () => {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Read More Behaviour</label>
+              <label className="text-sm font-medium text-espresso">How Read More Should Open</label>
               <p className="text-xs text-muted-foreground">
-                Use article page for full on-site articles, or choose URL/PDF to open an external link or document.
+                Usually you should use article page. URL and PDF are only for special cases.
               </p>
             </div>
             <label className="flex items-center gap-2 text-sm font-medium text-espresso md:self-end">
@@ -699,33 +699,33 @@ const LifestyleContent = () => {
                 onChange={(e) => setArticleForm((prev) => ({ ...prev, is_active: e.target.checked }))}
                 className="h-4 w-4"
               />
-              Active on site
+              Show this card on the site
             </label>
           </div>
 
           {articleForm.read_more_type === 'url' && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Read More Button Leads To</label>
+              <label className="text-sm font-medium text-espresso">Read More URL</label>
               <Input
                 value={articleForm.read_more_url}
                 onChange={(e) => setArticleForm((prev) => ({ ...prev, read_more_url: e.target.value }))}
                 placeholder="https://... or /some-page"
               />
               <p className="text-xs text-muted-foreground">
-                Paste the URL the customer should open when clicking Read More.
+                Paste the link that should open when someone clicks Read More.
               </p>
             </div>
           )}
 
           {articleForm.read_more_type === 'article' && (
             <div className="space-y-2 rounded-md border border-dashed p-3">
-              <label className="text-sm font-medium text-espresso">Article Page Preview Link</label>
+              <label className="text-sm font-medium text-espresso">Read More Page</label>
               <p className="text-xs text-muted-foreground">
-                After saving, this article will open on its own page and show related article suggestions automatically at the end.
+                After saving, this will open as its own full article page and show more article suggestions at the end.
               </p>
               {editingArticleId && articleForm.title.trim() ? (
                 <p className="text-xs text-muted-foreground">
-                  URL will look like: `/transform-your-home/...`
+                  Link will look like: `/transform-your-home/...`
                 </p>
               ) : null}
             </div>
@@ -733,14 +733,14 @@ const LifestyleContent = () => {
 
           {articleForm.read_more_type === 'pdf' && (
             <div className="space-y-2">
-              <label className="text-sm font-medium text-espresso">Read More Button Leads To</label>
+              <label className="text-sm font-medium text-espresso">Read More PDF</label>
               <Input
                 value={articleForm.read_more_pdf}
                 onChange={(e) => setArticleForm((prev) => ({ ...prev, read_more_pdf: e.target.value }))}
-                placeholder="Paste PDF link here, or upload PDF from computer below"
+                placeholder="Paste the PDF link here, or upload a PDF below"
               />
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Choose PDF from computer</label>
+                <label className="text-xs font-medium text-muted-foreground">Upload PDF</label>
                 <input
                   type="file"
                   accept=".pdf,application/pdf"
@@ -749,14 +749,14 @@ const LifestyleContent = () => {
                   className="text-sm"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Upload a PDF from your computer, or paste a PDF link manually.
+                  Upload a PDF or paste its link manually.
                 </p>
               </div>
             </div>
           )}
 
           <Button onClick={handleSaveArticle} disabled={isSavingArticle || isUploadingImage || isUploadingPdf}>
-            {editingArticleId ? 'Update Article' : 'Create Article'}
+            {editingArticleId ? 'Update Card + Read More Page' : 'Create Card + Read More Page'}
           </Button>
         </CardContent>
       </Card>
