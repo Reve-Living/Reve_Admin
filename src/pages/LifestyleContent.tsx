@@ -604,6 +604,11 @@ const LifestyleContent = () => {
                           onChange={(e) => updateArticleSection(index, { image: e.target.value })}
                           placeholder="Paste the image URL for this section, or upload below"
                         />
+                        {section.image ? (
+                          <Button type="button" variant="outline" size="sm" onClick={() => updateArticleSection(index, { image: '' })}>
+                            Remove Section Image
+                          </Button>
+                        ) : null}
                         <input
                           type="file"
                           accept={IMAGE_UPLOAD_ACCEPT}
