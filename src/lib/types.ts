@@ -195,6 +195,7 @@ export interface ProductMattress {
   product_subcategory_id?: number | null;
   name?: string;
   description?: string;
+  features?: string;
   image_url?: string;
   price?: number | null;
   original_price?: number | null;

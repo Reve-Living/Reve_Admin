@@ -10,6 +10,7 @@ type MattressOption = ProductMattress;
 const emptyOption = (): MattressOption => ({
   name: "",
   description: "",
+  features: "",
   image_url: "",
   price: null,
   original_price: null,
@@ -83,7 +84,13 @@ const Mattresses = () => {
     try {
       setLoading(true);
       const res = await apiGet<MattressOption[]>("/mattress-options/");
-      setItems(res || []);
+      const sorted = [...(res || [])].sort((a, b) => {
+        const orderA = Number(a.sort_order ?? 0);
+        const orderB = Number(b.sort_order ?? 0);
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      });
+      setItems(sorted);
     } catch (err) {
       console.error(err);
       toast.error("Failed to load mattresses");
@@ -383,6 +390,16 @@ const Mattresses = () => {
                 onChange={(e) => setEditing({ ...editing, description: e.target.value })}
               />
             </label>
+            <label className="col-span-2 text-sm font-medium text-espresso">
+              Features (shown in "See details" only)
+              <textarea
+                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                rows={4}
+                placeholder={"Enter one feature per line\nOrthopaedic support\nBreathable fabric\nHypoallergenic"}
+                value={editing.features || ""}
+                onChange={(e) => setEditing({ ...editing, features: e.target.value })}
+              />
+            </label>
             <div className="col-span-2 text-sm font-medium text-espresso space-y-2">
               <div className="flex items-center justify-between">
                 <span>Image</span>
@@ -447,6 +464,21 @@ const Mattresses = () => {
                   setEditing({ ...editing, original_price: e.target.value === "" ? null : Number(e.target.value) })
                 }
               />
+            </label>
+            <label className="text-sm font-medium text-espresso">
+              Sort order
+              <input
+                type="number"
+                step="1"
+                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                value={editing.sort_order ?? 0}
+                onChange={(e) =>
+                  setEditing({ ...editing, sort_order: e.target.value === "" ? 0 : Number(e.target.value) })
+                }
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Lower numbers show first on the product page.
+              </p>
             </label>
             <label className="flex items-center gap-2 text-sm font-medium text-espresso">
               <input
@@ -579,9 +611,17 @@ const Mattresses = () => {
                   <div>
                     <p className="text-base font-semibold text-espresso">{item.name}</p>
                     <p className="text-xs text-muted-foreground line-clamp-2">{item.description}</p>
+                    {item.features?.trim() && (
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                        Features: {item.features}
+                      </p>
+                    )}
                     <div className="text-xs text-muted-foreground mt-1">
                       Base: {item.price ?? 0} {item.enable_bunk_positions ? "• bunk" : ""}
                       {item.prices && item.prices.length ? ` • ${item.prices.length} size prices` : ""}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Sort order: {item.sort_order ?? 0}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
                       Assigned to: {(() => {
