@@ -5,7 +5,7 @@ import { IMAGE_UPLOAD_ACCEPT, WEBP_UPLOAD_HINT } from "../lib/upload";
 import type { MattressOptionPrice, ProductMattress, Category as ApiCategory, SubCategory as ApiSubCategory } from "../lib/types";
 import { toast } from "sonner";
 
-type MattressOption = ProductMattress & { source_type?: "global" | "product" };
+type MattressOption = ProductMattress;
 
 const emptyOption = (): MattressOption => ({
   name: "",
@@ -61,7 +61,6 @@ const getMattressScopeLabel = (
 
 const Mattresses = () => {
   const [items, setItems] = useState<MattressOption[]>([]);
-  const [productFormItems, setProductFormItems] = useState<MattressOption[]>([]);
   const [editing, setEditing] = useState<MattressOption>(emptyOption());
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<ApiCategory[]>([]);
@@ -79,23 +78,12 @@ const Mattresses = () => {
     () => subcategories.filter((sub) => (editing.subcategories || []).includes(sub.id)).map((sub) => sub.name),
     [editing.subcategories, subcategories]
   );
-  const combinedItems = useMemo(
-    () => [
-      ...(items || []).map((item) => ({ ...item, source_type: "global" as const })),
-      ...(productFormItems || []).map((item) => ({ ...item, source_type: "product" as const })),
-    ],
-    [items, productFormItems]
-  );
 
   const load = async () => {
     try {
       setLoading(true);
-      const [res, productRes] = await Promise.all([
-        apiGet<MattressOption[]>("/mattress-options/"),
-        apiGet<MattressOption[]>("/product-mattresses/"),
-      ]);
-      setItems((res || []).map((item) => ({ ...item, source_type: "global" })));
-      setProductFormItems((productRes || []).map((item) => ({ ...item, source_type: "product" })));
+      const res = await apiGet<MattressOption[]>("/mattress-options/");
+      setItems(res || []);
     } catch (err) {
       console.error(err);
       toast.error("Failed to load mattresses");
@@ -168,20 +156,7 @@ const Mattresses = () => {
     payload.categories = (editing.categories || []).filter(Boolean);
     payload.subcategories = (editing.subcategories || []).filter(Boolean);
     try {
-      if (editing.id && editing.source_type === "product") {
-        await apiPatch(`/product-mattresses/${editing.id}/`, {
-          name: (editing.name || "").trim(),
-          description: (editing.description || "").trim(),
-          image_url: (editing.image_url || "").trim(),
-          price: editing.price ?? null,
-          enable_bunk_positions: Boolean(editing.enable_bunk_positions),
-          price_top: editing.price_top ?? null,
-          price_bottom: editing.price_bottom ?? null,
-          price_both: editing.price_both ?? null,
-          source_product: editing.source_product ?? null,
-        });
-        toast.success("Mattress updated");
-      } else if (editing.id) {
+      if (editing.id) {
         try {
           await apiPatch(`/mattress-options/${editing.id}/`, payload);
           toast.success("Mattress updated");
@@ -206,11 +181,7 @@ const Mattresses = () => {
     if (!id) return;
     if (!window.confirm("Delete this mattress option?")) return;
     try {
-      if (editing.source_type === "product") {
-        await apiDelete(`/product-mattresses/${id}/`);
-      } else {
-        await apiDelete(`/mattress-options/${id}/`);
-      }
+      await apiDelete(`/mattress-options/${id}/`);
       toast.success("Deleted");
       if (editing.id === id) resetForm();
       await load();
@@ -597,10 +568,10 @@ const Mattresses = () => {
             {loading && <span className="text-xs text-muted-foreground">Loading…</span>}
           </div>
           <div className="space-y-3">
-            {combinedItems.length === 0 && <p className="text-sm text-muted-foreground">No mattresses yet.</p>}
-            {combinedItems.map((item) => (
+            {items.length === 0 && <p className="text-sm text-muted-foreground">No global mattresses yet.</p>}
+            {items.map((item) => (
               <div
-                key={`${item.source_type}-${item.id}`}
+                key={`global-${item.id}`}
                 className="rounded-lg border px-3 py-3 hover:border-primary/50 transition cursor-pointer bg-white"
                 onClick={() => setEditing({ ...item })}
               >
@@ -613,18 +584,16 @@ const Mattresses = () => {
                       {item.prices && item.prices.length ? ` • ${item.prices.length} size prices` : ""}
                     </div>
                     <div className="text-xs text-muted-foreground mt-1">
-                      {item.source_type === "product"
-                        ? `From product: ${item.product_name || `Product #${item.product_id}`}`
-                        : `Assigned to: ${(() => {
-                            const categoryNames = categories
-                              .filter((cat) => (item.categories || []).includes(cat.id))
-                              .map((cat) => cat.name);
-                            const subNames = subcategories
-                              .filter((sub) => (item.subcategories || []).includes(sub.id))
-                              .map((sub) => sub.name);
-                            const labels = [...categoryNames, ...subNames];
-                            return labels.length > 0 ? labels.join(" • ") : "All categories";
-                          })()}`}
+                      Assigned to: {(() => {
+                        const categoryNames = categories
+                          .filter((cat) => (item.categories || []).includes(cat.id))
+                          .map((cat) => cat.name);
+                        const subNames = subcategories
+                          .filter((sub) => (item.subcategories || []).includes(sub.id))
+                          .map((sub) => sub.name);
+                        const labels = [...categoryNames, ...subNames];
+                        return labels.length > 0 ? labels.join(" • ") : "All categories";
+                      })()}
                     </div>
                   </div>
                   <button

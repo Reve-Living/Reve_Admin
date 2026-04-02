@@ -6,11 +6,11 @@ import { Input } from '../components/ui/input';
 import { Plus, Trash2, ArrowLeft } from 'lucide-react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import type { FieldErrors } from 'react-hook-form';
 import { apiGet, apiPost, apiPut, apiUpload } from '../lib/api';
-import type { Category, Product, ProductDimensionRow, SubCategory, FilterType, FilterOption, CategoryFilter } from '../lib/types';
+import type { Category, Product, ProductDimensionRow, SubCategory, FilterType, FilterOption, CategoryFilter, ProductMattress } from '../lib/types';
 import { ICON_UPLOAD_ACCEPT, IMAGE_UPLOAD_ACCEPT, WEBP_UPLOAD_HINT } from '../lib/upload';
 
 const resolveCategoryId = (product: Product, categories: Category[]): number | undefined => {
@@ -278,6 +278,7 @@ type StyleLibraryItem = {
 };
 const MAX_INLINE_SVG_CHARS = 50000;
 const MAX_PRODUCT_PAYLOAD_BYTES = 2500000;
+type MattressFormValue = NonNullable<ProductFormValues['mattresses']>[number];
 
 const readFileAsText = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -380,6 +381,138 @@ const normalizeStoredSizePrice = (productBasePrice: number, storedValue?: number
   return raw;
 };
 
+const normalizeMattressName = (value?: string | null): string => String(value || '').trim().toLowerCase();
+
+const normalizeMattressText = (value?: string | null): string => String(value || '').trim();
+
+const normalizeMattressNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const mattressMatchesScope = (
+  mattress: ProductMattress,
+  categoryId?: number | null,
+  subcategoryId?: number | null
+) => {
+  const categoryIds = Array.isArray(mattress.categories) ? mattress.categories : [];
+  const subcategoryIds = Array.isArray(mattress.subcategories) ? mattress.subcategories : [];
+
+  if (subcategoryId && subcategoryId > 0) {
+    return (
+      subcategoryIds.includes(subcategoryId) ||
+      (subcategoryIds.length === 0 && categoryId != null && categoryIds.includes(categoryId)) ||
+      (subcategoryIds.length === 0 && categoryIds.length === 0)
+    );
+  }
+
+  if (categoryId && categoryId > 0) {
+    return (
+      (categoryIds.includes(categoryId) && subcategoryIds.length === 0) ||
+      (categoryIds.length === 0 && subcategoryIds.length === 0)
+    );
+  }
+
+  return false;
+};
+
+const buildVisibleMattressRows = (
+  library: ProductMattress[],
+  effectiveMattresses: ProductMattress[],
+  categoryId?: number | null,
+  subcategoryId?: number | null
+): MattressFormValue[] => {
+  const scopedLibrary = library.filter((mattress) =>
+    mattress.is_active !== false && mattressMatchesScope(mattress, categoryId, subcategoryId)
+  );
+  const effectiveLookup = new Map(
+    effectiveMattresses
+      .filter((mattress) => normalizeMattressName(mattress.name).length > 0)
+      .map((mattress) => [normalizeMattressName(mattress.name), mattress])
+  );
+
+  return scopedLibrary.map((mattress) => {
+    const override = effectiveLookup.get(normalizeMattressName(mattress.name));
+    return {
+      name: mattress.name || '',
+      description: normalizeMattressText(override?.description ?? mattress.description),
+      image_url: normalizeMattressText(override?.image_url ?? mattress.image_url),
+      price: normalizeMattressNumber(override?.price ?? mattress.price),
+      enable_bunk_positions: Boolean(override?.enable_bunk_positions ?? mattress.enable_bunk_positions),
+      price_top: normalizeMattressNumber(override?.price_top ?? mattress.price_top),
+      price_bottom: normalizeMattressNumber(override?.price_bottom ?? mattress.price_bottom),
+      price_both: normalizeMattressNumber(override?.price_both ?? mattress.price_both),
+      source_product: null,
+    };
+  });
+};
+
+const buildMattressOverridePayload = (
+  mattresses: MattressFormValue[],
+  library: ProductMattress[],
+  categoryId?: number | null,
+  subcategoryId?: number | null
+) => {
+  const scopedLibrary = library.filter((mattress) =>
+    mattress.is_active !== false && mattressMatchesScope(mattress, categoryId, subcategoryId)
+  );
+  const libraryLookup = new Map(
+    scopedLibrary
+      .filter((mattress) => normalizeMattressName(mattress.name).length > 0)
+      .map((mattress) => [normalizeMattressName(mattress.name), mattress])
+  );
+
+  return (mattresses || [])
+    .map((mattress) => {
+      const normalizedName = normalizeMattressName(mattress.name);
+      if (!normalizedName) return null;
+
+      const base = libraryLookup.get(normalizedName);
+      if (!base) return null;
+
+      const nextDescription = normalizeMattressText(mattress.description);
+      const nextImage = normalizeMattressText(mattress.image_url);
+      const nextPrice = normalizeMattressNumber(mattress.price);
+      const nextTop = normalizeMattressNumber(mattress.price_top);
+      const nextBottom = normalizeMattressNumber(mattress.price_bottom);
+      const nextBoth = normalizeMattressNumber(mattress.price_both);
+      const nextBunk = Boolean(mattress.enable_bunk_positions);
+
+      const baseDescription = normalizeMattressText(base.description);
+      const baseImage = normalizeMattressText(base.image_url);
+      const basePrice = normalizeMattressNumber(base.price);
+      const baseTop = normalizeMattressNumber(base.price_top);
+      const baseBottom = normalizeMattressNumber(base.price_bottom);
+      const baseBoth = normalizeMattressNumber(base.price_both);
+      const baseBunk = Boolean(base.enable_bunk_positions);
+
+      const hasOverride =
+        nextDescription !== baseDescription ||
+        nextImage !== baseImage ||
+        nextPrice !== basePrice ||
+        nextTop !== baseTop ||
+        nextBottom !== baseBottom ||
+        nextBoth !== baseBoth ||
+        nextBunk !== baseBunk;
+
+      if (!hasOverride) return null;
+
+      return {
+        name: normalizeMattressText(mattress.name),
+        description: nextDescription,
+        image_url: nextImage,
+        price: nextPrice,
+        enable_bunk_positions: nextBunk,
+        price_top: nextTop,
+        price_bottom: nextBottom,
+        price_both: nextBoth,
+        source_product: null,
+      };
+    })
+    .filter(Boolean) as MattressFormValue[];
+};
+
 const buildSizePriceOverrideSeed = (
   sizes: Array<{ name?: string }>,
   existingOverrides: Record<string, number>,
@@ -408,9 +541,10 @@ const ProductForm = () => {
   const [isSaving, setIsSaving] = useState(false);
   // Track whether filter selections changed so we don't wipe them on save
   const [filterValuesDirty, setFilterValuesDirty] = useState(false);
-  const [mattressImportId, setMattressImportId] = useState('');
   const [importProductOptions, setImportProductOptions] = useState<Product[]>([]);
   const [selectedImportProductId, setSelectedImportProductId] = useState<number | null>(null);
+  const [mattressLibrary, setMattressLibrary] = useState<ProductMattress[]>([]);
+  const [loadedProductMattresses, setLoadedProductMattresses] = useState<ProductMattress[]>([]);
   const [filterOptions, setFilterOptions] = useState<FilterOption[]>([]);
   const [categoryFilterOptions, setCategoryFilterOptions] = useState<FilterOption[]>([]);
   const [dimensionColumns, setDimensionColumns] = useState<string[]>(() => [...DIMENSION_SIZE_COLUMNS]);
@@ -583,7 +717,7 @@ const ProductForm = () => {
     name: "fabrics"
   });
 
-  const { fields: mattressFields, append: appendMattress, remove: removeMattress, replace: replaceMattresses } = useFieldArray({
+  const { fields: mattressFields, replace: replaceMattresses } = useFieldArray({
     control,
     name: "mattresses"
   });
@@ -633,17 +767,19 @@ const ProductForm = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const [cats, subs, products, _filters, options] = await Promise.all([
+        const [cats, subs, products, _filters, options, mattresses] = await Promise.all([
           apiGet<Category[]>('/categories/'),
           apiGet<SubCategory[]>('/subcategories/'),
           apiGet<Product[]>('/products/'),
           apiGet<FilterType[]>('/filter-types/'),
           apiGet<FilterOption[]>('/filter-options/'),
+          apiGet<ProductMattress[]>('/mattress-options/'),
         ]);
         setCategories(cats);
         setSubcategories(subs);
         setImportProductOptions(Array.isArray(products) ? products : []);
         setFilterOptions((options || []).filter((opt) => opt.is_active !== false));
+        setMattressLibrary(Array.isArray(mattresses) ? mattresses : []);
       } catch {
         toast.error('Failed to load categories');
       }
@@ -821,6 +957,7 @@ const ProductForm = () => {
           price_both: m.price_both !== undefined && m.price_both !== null ? Number(m.price_both) : null,
           source_product: m.source_product || null,
         }));
+        setLoadedProductMattresses(mattresses);
         const faqs = (product.faqs || []).map((faq) => ({
           question: (faq.question || '').trim(),
           answer: (faq.answer || '').trim(),
@@ -852,7 +989,6 @@ const ProductForm = () => {
         setValue('sizes', sizes);
         setValue('styles', styles);
         setValue('fabrics', fabrics);
-        setValue('mattresses', mattresses);
         setValue('faqs', faqs);
         setValue('dimensions', dimensions);
         setValue('delivery_info', product.delivery_info || '');
@@ -885,7 +1021,6 @@ const ProductForm = () => {
         replaceSizes(sizes);
         replaceStyles(styles);
         replaceFabrics(fabrics);
-        replaceMattresses(mattresses);
         replaceFaqs(faqs);
         replaceDimensions(dimensions);
         replaceInfoSections(Array.isArray(product.custom_info_sections) ? product.custom_info_sections : []);
@@ -897,7 +1032,7 @@ const ProductForm = () => {
       }
     };
     loadProduct();
-  }, [id, categories, subcategories, setValue, replaceImages, replaceVideos, replaceColors, replaceSizes, replaceStyles, replaceFabrics, replaceMattresses, replaceFaqs, replaceDimensions, replaceInfoSections, replaceFilterValues]);
+  }, [id, categories, subcategories, setValue, replaceImages, replaceVideos, replaceColors, replaceSizes, replaceStyles, replaceFabrics, replaceFaqs, replaceDimensions, replaceInfoSections, replaceFilterValues]);
 
   useEffect(() => {
     if (!id) return;
@@ -908,6 +1043,38 @@ const ProductForm = () => {
       setValue('subcategory', loadedProductSubcategory);
     }
   }, [id, loadedProductCategory, loadedProductSubcategory, selectedCategory, selectedSubcategory, setValue]);
+
+  const scopedCategoryMattresses = useMemo(() => {
+    const categoryId =
+      Number.isFinite(Number(selectedCategory)) && Number(selectedCategory) > 0
+        ? Number(selectedCategory)
+        : loadedProductCategory;
+    const subcategoryId =
+      Number.isFinite(Number(selectedSubcategory)) && Number(selectedSubcategory) > 0
+        ? Number(selectedSubcategory)
+        : loadedProductSubcategory;
+
+    if (!categoryId) return [];
+
+    return buildVisibleMattressRows(
+      mattressLibrary,
+      loadedProductMattresses,
+      categoryId,
+      subcategoryId
+    );
+  }, [
+    loadedProductCategory,
+    loadedProductMattresses,
+    loadedProductSubcategory,
+    mattressLibrary,
+    selectedCategory,
+    selectedSubcategory,
+  ]);
+
+  useEffect(() => {
+    setValue('mattresses', scopedCategoryMattresses);
+    replaceMattresses(scopedCategoryMattresses);
+  }, [replaceMattresses, scopedCategoryMattresses, setValue]);
 
   const handleUpload = async (file: File, onSuccess: (url: string) => void, inlineSvgPreferred = false) => {
     setIsUploading(true);
@@ -1223,30 +1390,6 @@ const ProductForm = () => {
     }
   };
 
-  const importMattressesFromProduct = async () => {
-    const pid = mattressImportId.trim();
-    if (!pid) {
-      toast.error('Enter a product ID to import mattresses');
-      return;
-    }
-    try {
-      const product = await apiGet<Product>(`/products/${pid}/`);
-      const mattresses = (product.mattresses || []).map((m) => ({
-        name: m.name || '',
-        description: m.description || '',
-        image_url: m.image_url || '',
-        price: m.price !== undefined && m.price !== null ? Number(m.price) : null,
-        source_product: m.source_product || product.id,
-      }));
-      const merged = [...(watch('mattresses') || []), ...mattresses];
-      setValue('mattresses', merged);
-      replaceMattresses(merged);
-      toast.success(`Imported ${mattresses.length} mattress option${mattresses.length === 1 ? '' : 's'} from product #${pid}`);
-    } catch {
-      toast.error('Failed to import mattresses from that product');
-    }
-  };
-
   const handleMultiImageUpload = async (fileList: FileList) => {
     const files = Array.from(fileList);
     if (files.length === 0) return;
@@ -1387,39 +1530,12 @@ const ProductForm = () => {
               .filter((c) => c.image_url.length > 0),
           }))
           .filter((fabric) => fabric.name.length > 0 && (fabric.colors?.length || 0) > 0),
-        mattresses: (data.mattresses || [])
-          .map((m) => ({
-            name: (m.name || '').trim(),
-            description: (m.description || '').trim(),
-            image_url: (m.image_url || '').trim(),
-            enable_bunk_positions: Boolean(m.enable_bunk_positions),
-            price_top: (() => {
-              const raw = (m as { price_top?: unknown })?.price_top;
-              if (raw === null || raw === undefined || raw === '') return null;
-              const num = Number(raw as any);
-              return Number.isFinite(num) ? num : null;
-            })(),
-            price_bottom: (() => {
-              const raw = (m as { price_bottom?: unknown })?.price_bottom;
-              if (raw === null || raw === undefined || raw === '') return null;
-              const num = Number(raw as any);
-              return Number.isFinite(num) ? num : null;
-            })(),
-            price_both: (() => {
-              const raw = (m as { price_both?: unknown })?.price_both;
-              if (raw === null || raw === undefined || raw === '') return null;
-              const num = Number(raw as any);
-              return Number.isFinite(num) ? num : null;
-            })(),
-            price: (() => {
-              const raw = (m as { price?: unknown })?.price;
-              if (raw === null || raw === undefined || raw === '') return null;
-              const num = Number(raw as any);
-              return Number.isFinite(num) ? num : null;
-            })(),
-            source_product: m.source_product ? Number(m.source_product) : null,
-          }))
-          .filter((m) => (m.name?.length || 0) > 0 || (m.description?.length || 0) > 0 || !!m.image_url || Number.isFinite(m.price)),
+        mattresses: buildMattressOverridePayload(
+          data.mattresses || [],
+          mattressLibrary,
+          Number.isFinite(Number(data.category)) ? Number(data.category) : loadedProductCategory,
+          Number.isFinite(Number(data.subcategory)) ? Number(data.subcategory) : loadedProductSubcategory
+        ),
         features: (data.features || []).map((f) => f.trim()).filter(Boolean),
         dimensions: (data.dimensions || [])
           .map((row) => {
@@ -1492,9 +1608,6 @@ const ProductForm = () => {
       }
       if (!payload.fabrics || payload.fabrics.length === 0) {
         delete (payload as Partial<ProductFormValues>).fabrics;
-      }
-      if (!payload.mattresses || payload.mattresses.length === 0) {
-        delete (payload as Partial<ProductFormValues>).mattresses;
       }
       if (!payload.features || payload.features.length === 0) {
         delete (payload as Partial<ProductFormValues>).features;
@@ -2295,58 +2408,26 @@ const ProductForm = () => {
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className="text-sm font-medium">Mattress options</label>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Input
-                    value={mattressImportId}
-                    onChange={(e) => setMattressImportId(e.target.value)}
-                    placeholder="Import from product ID"
-                    className="w-44"
-                  />
-                  <Button type="button" variant="outline" size="sm" onClick={importMattressesFromProduct}>
-                    Import
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      appendMattress({
-                        name: '',
-                        description: '',
-                        image_url: '',
-                        price: null,
-                        source_product: null,
-                        enable_bunk_positions: false,
-                        price_top: null,
-                        price_bottom: null,
-                        price_both: null,
-                      })
-                    }
-                  >
-                    <Plus className="h-4 w-4 mr-2" /> Add Mattress
-                  </Button>
-                </div>
               </div>
               {mattressFields.length === 0 && (
-                <p className="text-xs text-muted-foreground">Optional: add mattresses that can be reused by other products.</p>
+                <p className="text-xs text-muted-foreground">
+                  No category mattresses found yet. Add mattresses in the Mattresses page for this category first.
+                </p>
+              )}
+              {mattressFields.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  These mattresses come from the Mattresses page for the selected category. Edit only the product-specific override fields here.
+                </p>
               )}
               <div className="space-y-3">
                 {mattressFields.map((field, index) => (
-                  <div key={field.id} className="space-y-3 rounded-md border p-3 relative">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-2 top-2"
-                      onClick={() => removeMattress(index)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                  <div key={field.id} className="space-y-3 rounded-md border p-3">
                     <div className="grid grid-cols-2 gap-2">
                       <Input
                         {...register(`mattresses.${index}.name` as const)}
-                        placeholder="Mattress name (e.g. Winwood Mattress)"
+                        placeholder="Mattress name"
                         className="col-span-1"
+                        readOnly
                       />
                       <Input
                         type="number"
@@ -2354,14 +2435,7 @@ const ProductForm = () => {
                         {...register(`mattresses.${index}.price` as const, {
                           setValueAs: (val) => (val === '' || val === null || val === undefined ? null : Number(val)),
                         })}
-                        placeholder="Price (optional)"
-                        className="col-span-1"
-                      />
-                      <Input
-                        {...register(`mattresses.${index}.source_product` as const, {
-                          setValueAs: (val) => (val === '' || val === null || val === undefined ? null : Number(val)),
-                        })}
-                        placeholder="Source product ID (optional)"
+                        placeholder="Product-specific price"
                         className="col-span-1"
                       />
                       <Input
@@ -2375,6 +2449,9 @@ const ProductForm = () => {
                         }}
                         className="col-span-1 cursor-pointer bg-black/5"
                       />
+                      <div className="col-span-1 flex items-center rounded-md border border-dashed px-3 text-xs text-muted-foreground">
+                        Override image for this product only
+                      </div>
                       <label className="col-span-2 flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
@@ -2414,11 +2491,11 @@ const ProductForm = () => {
                     <textarea
                       {...register(`mattresses.${index}.description` as const)}
                       className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      placeholder="Description / tension / springs (optional)"
+                      placeholder="Product-specific description override"
                     />
                     <Input
                       {...register(`mattresses.${index}.image_url` as const)}
-                      placeholder="Image URL (optional)"
+                      placeholder="Product-specific image URL"
                     />
                   </div>
                 ))}
