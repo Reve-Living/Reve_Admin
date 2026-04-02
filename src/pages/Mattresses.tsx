@@ -87,6 +87,9 @@ const Mattresses = () => {
       const sorted = [...(res || [])].sort((a, b) => {
         const orderA = Number(a.sort_order ?? 0);
         const orderB = Number(b.sort_order ?? 0);
+        const priorityA = orderA > 0 ? 0 : 1;
+        const priorityB = orderB > 0 ? 0 : 1;
+        if (priorityA !== priorityB) return priorityA - priorityB;
         if (orderA !== orderB) return orderA - orderB;
         return String(a.name || "").localeCompare(String(b.name || ""));
       });
@@ -477,7 +480,7 @@ const Mattresses = () => {
                 }
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Lower numbers show first on the product page.
+                Use 1, 2, 3... to control order. 0 means unsorted and appears after ordered items.
               </p>
             </label>
             <label className="flex items-center gap-2 text-sm font-medium text-espresso">
