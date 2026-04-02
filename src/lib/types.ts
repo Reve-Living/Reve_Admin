@@ -189,6 +189,10 @@ export interface ProductFabric {
 
 export interface ProductMattress {
   id?: number;
+  product_id?: number;
+  product_name?: string;
+  product_category_id?: number | null;
+  product_subcategory_id?: number | null;
   name?: string;
   description?: string;
   image_url?: string;
