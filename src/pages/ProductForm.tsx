@@ -3,7 +3,7 @@ import * as z from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Plus, Trash2, ArrowLeft } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, Search } from 'lucide-react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -543,6 +543,8 @@ const ProductForm = () => {
   const [filterValuesDirty, setFilterValuesDirty] = useState(false);
   const [importProductOptions, setImportProductOptions] = useState<Product[]>([]);
   const [selectedImportProductId, setSelectedImportProductId] = useState<number | null>(null);
+  const [importProductSearch, setImportProductSearch] = useState('');
+  const [isImportAutocompleteOpen, setIsImportAutocompleteOpen] = useState(false);
   const [mattressLibrary, setMattressLibrary] = useState<ProductMattress[]>([]);
   const [loadedProductMattresses, setLoadedProductMattresses] = useState<ProductMattress[]>([]);
   const [filterOptions, setFilterOptions] = useState<FilterOption[]>([]);
@@ -550,6 +552,7 @@ const ProductForm = () => {
   const [dimensionColumns, setDimensionColumns] = useState<string[]>(() => [...DIMENSION_SIZE_COLUMNS]);
   const [loadedProductCategory, setLoadedProductCategory] = useState<number | null>(null);
   const [loadedProductSubcategory, setLoadedProductSubcategory] = useState<number | null>(null);
+  const importAutocompleteRef = useRef<HTMLDivElement | null>(null);
 
   const { register, control, handleSubmit, formState: { errors }, setValue, watch } = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -614,6 +617,29 @@ const ProductForm = () => {
     watchPrice && watchDiscount && watchDiscount > 0 && displayDiscountFactor && displayDiscountFactor > 0
       ? (watchPrice / displayDiscountFactor).toFixed(2)
       : '';
+  const filteredImportProductOptions = useMemo(() => {
+    const query = importProductSearch.trim().toLowerCase();
+    if (!query) return importProductOptions;
+
+    return importProductOptions.filter((product) => {
+      const haystack = [
+        product.name,
+        product.slug,
+        product.category_name,
+        product.subcategory_name,
+        String(product.id ?? ''),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [importProductOptions, importProductSearch]);
+  const selectedImportProduct = useMemo(
+    () => importProductOptions.find((product) => product.id === selectedImportProductId) || null,
+    [importProductOptions, selectedImportProductId]
+  );
 
   const deriveDimensionColumnsFromRows = (rows: ProductDimensionRow[]) => {
     const discoveredColumns = Array.from(
@@ -866,6 +892,18 @@ const ProductForm = () => {
       }
     };
     loadLibrary();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!importAutocompleteRef.current) return;
+      if (!importAutocompleteRef.current.contains(event.target as Node)) {
+        setIsImportAutocompleteOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -2051,18 +2089,53 @@ const ProductForm = () => {
                     </option>
                   ))}
                 </select>
-                <select
-                  className="h-10 min-w-[220px] rounded-md border border-input bg-background px-3 text-sm"
-                  value={selectedImportProductId ?? ''}
-                  onChange={(e) => setSelectedImportProductId(e.target.value ? Number(e.target.value) : null)}
-                >
-                  <option value="">Select product to import from</option>
-                  {importProductOptions.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} (#{p.id})
-                    </option>
-                  ))}
-                </select>
+                <div ref={importAutocompleteRef} className="relative min-w-[320px] space-y-2">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={importProductSearch}
+                      onChange={(e) => {
+                        setImportProductSearch(e.target.value);
+                        setIsImportAutocompleteOpen(true);
+                      }}
+                      onFocus={() => setIsImportAutocompleteOpen(true)}
+                      placeholder="Search product by name, ID, category..."
+                      className="h-10 bg-white pl-9"
+                    />
+                  </div>
+                  {isImportAutocompleteOpen && importProductSearch.trim().length > 0 && (
+                    <div className="absolute left-0 right-0 top-full z-20 mt-1 max-h-72 overflow-y-auto rounded-md border border-input bg-white shadow-lg">
+                      {filteredImportProductOptions.length > 0 ? (
+                        filteredImportProductOptions.slice(0, 20).map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className="flex w-full flex-col items-start gap-1 border-b border-border/50 px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted/50"
+                            onClick={() => {
+                              setSelectedImportProductId(p.id);
+                              setImportProductSearch(`${p.name} (#${p.id})`);
+                              setIsImportAutocompleteOpen(false);
+                            }}
+                          >
+                            <span className="font-medium text-foreground">{p.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              #{p.id}
+                              {p.category_name ? ` • ${p.category_name}` : ''}
+                              {p.subcategory_name ? ` • ${p.subcategory_name}` : ''}
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">No products found</div>
+                      )}
+                    </div>
+                  )}
+                  <div className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm flex items-center text-muted-foreground">
+                    {selectedImportProduct
+                      ? `Selected: ${selectedImportProduct.name} (#${selectedImportProduct.id})`
+                      : 'No product selected'}
+                  </div>
+                </div>
                 <Button type="button" variant="outline" size="sm" onClick={importStylesFromProduct}>
                   Import styles
                 </Button>
