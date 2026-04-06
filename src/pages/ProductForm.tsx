@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Plus, Trash2, ArrowLeft, Search } from 'lucide-react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
@@ -533,7 +533,9 @@ const buildSizePriceOverrideSeed = (
 
 const ProductForm = () => {
   const { id } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isEditing = Boolean(id);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<SubCategory[]>([]);
@@ -552,7 +554,9 @@ const ProductForm = () => {
   const [dimensionColumns, setDimensionColumns] = useState<string[]>(() => [...DIMENSION_SIZE_COLUMNS]);
   const [loadedProductCategory, setLoadedProductCategory] = useState<number | null>(null);
   const [loadedProductSubcategory, setLoadedProductSubcategory] = useState<number | null>(null);
+  const [appliedInitialFilters, setAppliedInitialFilters] = useState(false);
   const importAutocompleteRef = useRef<HTMLDivElement | null>(null);
+  const returnToProducts = location.search ? `/products${location.search}` : '/products';
 
   const { register, control, handleSubmit, formState: { errors }, setValue, watch } = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
@@ -812,6 +816,45 @@ const ProductForm = () => {
     };
     load();
   }, []);
+
+  useEffect(() => {
+    if (id || appliedInitialFilters || categories.length === 0) return;
+
+    const categoryToken = (searchParams.get('category') || '').trim();
+    const subcategoryToken = (searchParams.get('subcategory') || '').trim();
+
+    if (!categoryToken) {
+      setAppliedInitialFilters(true);
+      return;
+    }
+
+    const matchedCategory =
+      categories.find((category) => category.slug === categoryToken || String(category.id) === categoryToken) || null;
+
+    if (!matchedCategory) {
+      setAppliedInitialFilters(true);
+      return;
+    }
+
+    if (!Number(selectedCategory || 0)) {
+      setValue('category', matchedCategory.id);
+    }
+
+    if (subcategoryToken) {
+      const matchedSubcategory =
+        subcategories.find(
+          (subcategory) =>
+            Number(subcategory.category) === Number(matchedCategory.id) &&
+            (subcategory.slug === subcategoryToken || String(subcategory.id) === subcategoryToken)
+        ) || null;
+
+      if (matchedSubcategory && !Number(selectedSubcategory || 0)) {
+        setValue('subcategory', matchedSubcategory.id);
+      }
+    }
+
+    setAppliedInitialFilters(true);
+  }, [id, appliedInitialFilters, categories, subcategories, searchParams, selectedCategory, selectedSubcategory, setValue]);
 
   // Load filter options from the selected subcategory when present.
   // If the category has no subcategories, fall back to category-level filters.
@@ -1680,7 +1723,7 @@ const ProductForm = () => {
         toast.success('Product created successfully');
       }
 
-      navigate('/products');
+      navigate(returnToProducts);
     } catch {
       toast.error('Failed to save product');
     } finally {
@@ -1691,7 +1734,7 @@ const ProductForm = () => {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex items-center space-x-4">
-        <Link to="/products">
+        <Link to={returnToProducts}>
           <Button variant="ghost" size="icon">
             <ArrowLeft className="h-5 w-5" />
           </Button>

@@ -3,19 +3,41 @@ import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Edit, Eye, EyeOff, Trash2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { apiDelete, apiGet, apiPatch } from '../lib/api';
 import type { Product, Category, SubCategory } from '../lib/types';
 import { toast } from 'sonner';
 
 const Products = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string | 'all'>('all');
-  const [selectedSubcategory, setSelectedSubcategory] = useState<string | 'all'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string | 'all'>(() => searchParams.get('category') || 'all');
+  const [selectedSubcategory, setSelectedSubcategory] = useState<string | 'all'>(() => searchParams.get('subcategory') || 'all');
   const getDisplayOrder = (value?: number) => {
     const num = Number(value);
     return Number.isFinite(num) ? num : 0;
+  };
+
+  useEffect(() => {
+    const nextCategory = searchParams.get('category') || 'all';
+    const nextSubcategory = searchParams.get('subcategory') || 'all';
+    setSelectedCategory((current) => (current === nextCategory ? current : nextCategory));
+    setSelectedSubcategory((current) => (current === nextSubcategory ? current : nextSubcategory));
+  }, [searchParams]);
+
+  const updateProductFilters = (category: string | 'all', subcategory: string | 'all') => {
+    const nextParams = new URLSearchParams(searchParams);
+
+    if (category === 'all') nextParams.delete('category');
+    else nextParams.set('category', category);
+
+    if (subcategory === 'all') nextParams.delete('subcategory');
+    else nextParams.set('subcategory', subcategory);
+
+    setSelectedCategory(category);
+    setSelectedSubcategory(subcategory);
+    setSearchParams(nextParams, { replace: true });
   };
 
   const loadData = async () => {
@@ -122,6 +144,14 @@ const Products = () => {
     });
   }, [products, selectedCategoryData, availableSubcategories, selectedCategory, selectedSubcategory]);
 
+  const productFormSearch = useMemo(() => {
+    const params = new URLSearchParams();
+    if (selectedCategory !== 'all') params.set('category', selectedCategory);
+    if (selectedSubcategory !== 'all') params.set('subcategory', selectedSubcategory);
+    const query = params.toString();
+    return query ? `?${query}` : '';
+  }, [selectedCategory, selectedSubcategory]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -129,7 +159,7 @@ const Products = () => {
           <h2 className="text-3xl font-serif font-bold text-espresso">Products</h2>
           <p className="text-muted-foreground">Manage your product catalog.</p>
         </div>
-        <Link to="/products/new">
+        <Link to={`/products/new${productFormSearch}`}>
           <Button className="bg-primary text-white hover:bg-primary/90">
             Add Product
           </Button>
@@ -143,8 +173,7 @@ const Products = () => {
           value={selectedCategory === 'all' ? '' : selectedCategory}
           onChange={(e) => {
             const val = e.target.value;
-            setSelectedCategory(val === '' ? 'all' : val);
-            setSelectedSubcategory('all');
+            updateProductFilters(val === '' ? 'all' : val, 'all');
           }}
         >
           <option value="">All categories</option>
@@ -161,7 +190,7 @@ const Products = () => {
           value={selectedSubcategory === 'all' ? '' : selectedSubcategory}
           onChange={(e) => {
             const val = e.target.value;
-            setSelectedSubcategory(val === '' ? 'all' : val);
+            updateProductFilters(selectedCategory, val === '' ? 'all' : val);
           }}
         >
           <option value="">All subcategories</option>
@@ -177,8 +206,7 @@ const Products = () => {
             variant="outline"
             size="sm"
             onClick={() => {
-              setSelectedCategory('all');
-              setSelectedSubcategory('all');
+              updateProductFilters('all', 'all');
             }}
           >
             Clear
@@ -234,7 +262,7 @@ const Products = () => {
                     >
                       {product.is_hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                     </Button>
-                    <Link to={`/products/edit/${product.id}`}>
+                    <Link to={`/products/edit/${product.id}${productFormSearch}`}>
                       <Button variant="ghost" size="icon">
                         <Edit className="h-4 w-4" />
                       </Button>
