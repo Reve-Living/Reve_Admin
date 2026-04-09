@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { apiDelete, apiGet, apiPost, apiPut } from '../lib/api';
-import type { Category, Promotion, SubCategory } from '../lib/types';
+import type { AnnouncementSettings, Category, Promotion, SubCategory } from '../lib/types';
 import { toast } from 'sonner';
 
 const todayString = () => new Date().toISOString().slice(0, 10);
@@ -27,24 +27,29 @@ const Promotions = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<SubCategory[]>([]);
   const [form, setForm] = useState<Promotion>(emptyPromotion());
+  const [defaultAnnouncement, setDefaultAnnouncement] = useState('Coming Soon');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingDefault, setIsSavingDefault] = useState(false);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [promotionData, categoryData, subcategoryData] = await Promise.all([
+      const [promotionData, categoryData, subcategoryData, announcementSettings] = await Promise.all([
         apiGet<Promotion[]>('/promotions/'),
         apiGet<Category[]>('/categories/'),
         apiGet<SubCategory[]>('/subcategories/'),
+        apiGet<AnnouncementSettings>('/promotions/default-announcement/'),
       ]);
       setPromotions(Array.isArray(promotionData) ? promotionData : []);
       setCategories(Array.isArray(categoryData) ? categoryData : []);
       setSubcategories(Array.isArray(subcategoryData) ? subcategoryData : []);
+      setDefaultAnnouncement(announcementSettings?.default_text || 'Coming Soon');
     } catch {
       toast.error('Failed to load promotions');
       setPromotions([]);
+      setDefaultAnnouncement('Coming Soon');
     } finally {
       setIsLoading(false);
     }
@@ -53,6 +58,22 @@ const Promotions = () => {
   useEffect(() => {
     void loadData();
   }, []);
+
+  const handleSaveDefaultAnnouncement = async () => {
+    if (isSavingDefault) return;
+    setIsSavingDefault(true);
+    try {
+      const response = await apiPut<AnnouncementSettings>('/promotions/default-announcement/', {
+        default_text: defaultAnnouncement.trim(),
+      });
+      setDefaultAnnouncement(response.default_text || '');
+      toast.success('Default announcement updated');
+    } catch {
+      toast.error('Failed to save default announcement');
+    } finally {
+      setIsSavingDefault(false);
+    }
+  };
 
   const sortedPromotions = useMemo(
     () =>
@@ -164,6 +185,30 @@ const Promotions = () => {
           </Button>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Default announcement</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-espresso">Fallback top-bar text</label>
+            <Input
+              value={defaultAnnouncement}
+              onChange={(e) => setDefaultAnnouncement(e.target.value)}
+              placeholder="Coming Soon"
+            />
+            <p className="text-xs text-muted-foreground">
+              This shows on the website whenever there is no live promotion announcement. Scheduled promotions still override it during their active dates.
+            </p>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSaveDefaultAnnouncement} disabled={isSavingDefault}>
+              Save Default Announcement
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

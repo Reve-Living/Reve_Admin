@@ -131,6 +131,12 @@ export interface Promotion {
   updated_at?: string;
 }
 
+export interface AnnouncementSettings {
+  id?: number;
+  default_text?: string;
+  updated_at?: string;
+}
+
 export interface ProductImage {
   id?: number;
   url: string;
