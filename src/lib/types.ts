@@ -135,6 +135,7 @@ export interface ProductImage {
   id?: number;
   url: string;
   color_name?: string;
+  style_name?: string;
   alt_text?: string;
 }
 

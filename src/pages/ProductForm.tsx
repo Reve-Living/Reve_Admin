@@ -132,6 +132,7 @@ const productSchema = z.object({
         z.object({
           url: z.string().optional().nullable(),
           color_name: z.string().optional().nullable(),
+          style_name: z.string().optional().nullable(),
           alt_text: z.string().optional().nullable(),
         })
       )
@@ -990,7 +991,12 @@ const ProductForm = () => {
         setValue('slug', product.slug || '');
         setValue('meta_title', product.meta_title || '');
         setValue('meta_description', product.meta_description || '');
-        const images = product.images.map((i) => ({ url: i.url, color_name: i.color_name || '', alt_text: i.alt_text || '' }));
+        const images = product.images.map((i) => ({
+          url: i.url,
+          color_name: i.color_name || '',
+          style_name: i.style_name || '',
+          alt_text: i.alt_text || '',
+        }));
         const videos = product.videos.map((v) => ({ url: v.url }));
         const colors = product.colors.map((c) => ({
           name: c.name,
@@ -1477,7 +1483,7 @@ const ProductForm = () => {
     setIsUploading(true);
     try {
       const uploaded = await Promise.all(files.map((file) => apiUpload('/uploads/', file)));
-      uploaded.forEach((res) => appendImage({ url: res.url, alt_text: '' }));
+      uploaded.forEach((res) => appendImage({ url: res.url, color_name: '', style_name: '', alt_text: '' }));
       toast.success(`${uploaded.length} image${uploaded.length > 1 ? 's' : ''} uploaded`);
     } catch {
       toast.error('Some images failed to upload');
@@ -1548,6 +1554,7 @@ const ProductForm = () => {
           .map((img) => ({
             url: (img.url || '').trim(),
             color_name: (img.color_name || '').trim(),
+            style_name: (img.style_name || '').trim(),
             alt_text: (img.alt_text || '').trim(),
           }))
           .filter((img) => img.url.length > 0),
@@ -1987,7 +1994,12 @@ const ProductForm = () => {
                 }}
                 className="inline-flex w-64 cursor-pointer bg-black/5"
               />
-              <Button type="button" variant="outline" size="sm" onClick={() => appendImage({ url: '', alt_text: '' })}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => appendImage({ url: '', color_name: '', style_name: '', alt_text: '' })}
+              >
                 <Plus className="h-4 w-4 mr-2" /> Add Image
               </Button>
               <Button type="button" variant="outline" size="sm" onClick={() => appendVideo({ url: '' })}>
@@ -2003,6 +2015,15 @@ const ProductForm = () => {
                 const fabricColors = (watch('fabrics') || [])
                   .flatMap((f) => (f?.colors || []).map((c: any) => c?.name).filter(Boolean));
                 const colorOptions = Array.from(new Set([...swatchColors, ...fabricColors]));
+                const styleOptions = Array.from(
+                  new Set(
+                    watchedStyles.flatMap((style) =>
+                      normalizeStyleOptions((style as { options?: unknown })?.options, false)
+                        .map((option) => (option.label || '').trim())
+                        .filter(Boolean)
+                    )
+                  )
+                );
                 return (
                 <div key={field.id} className="space-y-2">
                   <div className="flex gap-2">
@@ -2049,6 +2070,22 @@ const ProductForm = () => {
                       ))}
                     </select>
                     <p className="text-[11px] text-muted-foreground">If set, this image shows when that color is selected on the storefront.</p>
+                  </div>
+                  <div className="grid gap-1">
+                    <label className="text-xs text-muted-foreground">Optional: bind to style</label>
+                    <select
+                      className="w-56 rounded-md border border-input bg-white px-2 py-1 text-sm"
+                      value={watch(`images.${index}.style_name`) || ''}
+                      onChange={(e) => setValue(`images.${index}.style_name`, e.target.value)}
+                    >
+                      <option value="">No style binding</option>
+                      {styleOptions.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-muted-foreground">If set, this image shows when that style option is selected on the storefront.</p>
                   </div>
                 </div>
               )})}
