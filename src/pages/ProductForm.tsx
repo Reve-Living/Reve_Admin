@@ -603,7 +603,13 @@ const ProductForm = () => {
   const selectedCategory = watch('category');
   const selectedSubcategory = watch('subcategory');
   const featuresValue = (watch('features') || []).join('\n');
-  const availableSubcategories = subcategories.filter((s) => s.category === selectedCategory);
+  const subcategoryMatchesCategory = (subcategory: SubCategory, categoryId?: number | string | null) => {
+    const numericCategoryId = Number(categoryId || 0);
+    if (!numericCategoryId) return false;
+    return Number(subcategory.category) === numericCategoryId
+      || (subcategory.linked_category_ids || []).map(Number).includes(numericCategoryId);
+  };
+  const availableSubcategories = subcategories.filter((s) => subcategoryMatchesCategory(s, selectedCategory));
   const watchPrice = watch('price');
   const watchDiscount = watch('discount_percentage');
   const watchedStyles = watch('styles') || [];
@@ -845,7 +851,7 @@ const ProductForm = () => {
       const matchedSubcategory =
         subcategories.find(
           (subcategory) =>
-            Number(subcategory.category) === Number(matchedCategory.id) &&
+            subcategoryMatchesCategory(subcategory, matchedCategory.id) &&
             (subcategory.slug === subcategoryToken || String(subcategory.id) === subcategoryToken)
         ) || null;
 
@@ -868,7 +874,7 @@ const ProductForm = () => {
 
       const categoryId = Number(selectedCategory);
       const subcategoryId = Number(selectedSubcategory || 0);
-      const hasSubcategories = subcategories.some((sub) => Number(sub.category) === categoryId);
+      const hasSubcategories = subcategories.some((sub) => subcategoryMatchesCategory(sub, categoryId));
       const filterQuery =
         hasSubcategories && subcategoryId > 0
           ? `/category-filters/?subcategory=${subcategoryId}`

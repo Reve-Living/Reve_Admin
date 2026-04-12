@@ -23,6 +23,10 @@ const emptyPromotion = (): Promotion => ({
 });
 
 const Promotions = () => {
+  const subcategoryMatchesCategory = (subcategory: SubCategory, categoryId: number) =>
+    Number(subcategory.category) === Number(categoryId) ||
+    (subcategory.linked_category_ids || []).map(Number).includes(Number(categoryId));
+
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<SubCategory[]>([]);
@@ -382,7 +386,7 @@ const Promotions = () => {
             <div className="mt-4 max-h-72 space-y-3 overflow-y-auto pr-1">
               {categories.map((category) => {
                 const categoryChecked = (form.categories || []).includes(category.id);
-                const categorySubcategories = subcategories.filter((sub) => sub.category === category.id);
+                const categorySubcategories = subcategories.filter((sub) => subcategoryMatchesCategory(sub, category.id));
                 return (
                   <div key={category.id} className="rounded-md border border-border/60 bg-ivory/60 p-3">
                     <label className="flex items-center gap-2 text-sm font-medium text-espresso">

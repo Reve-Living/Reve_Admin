@@ -18,6 +18,9 @@ const toSafeSlug = (value: string) =>
     .replace(/-+/g, '-')
     .replace(/^-+|-+$/g, '') || 'item';
 
+const getLinkedCategoryIds = (subcategory: SubCategory) =>
+  Array.from(new Set([Number(subcategory.category), ...((subcategory.linked_category_ids || []).map(Number))])).filter(Boolean);
+
 const Categories = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -55,6 +58,7 @@ const Categories = () => {
     metaTitle: '',
     metaDescription: '',
     sort_order: 0,
+    linkedCategoryIds: [] as number[],
     selectedProducts: [] as number[],
   });
   const [filterForm, setFilterForm] = useState({
@@ -157,8 +161,8 @@ const Categories = () => {
   };
 
   const openSubCategoryModal = (categoryId: number, subCategory?: SubCategory) => {
-    setSelectedCategoryId(categoryId);
     if (subCategory) {
+      setSelectedCategoryId(subCategory.category);
       setEditingSubCategory(subCategory);
       setSubCategoryFormData({
         name: subCategory.name,
@@ -169,11 +173,13 @@ const Categories = () => {
         metaTitle: subCategory.meta_title || '',
         metaDescription: subCategory.meta_description || '',
         sort_order: Number(subCategory.sort_order) || 0,
+        linkedCategoryIds: getLinkedCategoryIds(subCategory).filter((id) => id !== Number(subCategory.category)),
         selectedProducts: products
           .filter((p) => p.subcategory === subCategory.id)
           .map((p) => p.id),
       });
     } else {
+      setSelectedCategoryId(categoryId);
       setEditingSubCategory(null);
       setSubCategoryFormData({
         name: '',
@@ -184,6 +190,7 @@ const Categories = () => {
         metaTitle: '',
         metaDescription: '',
         sort_order: 0,
+        linkedCategoryIds: [],
         selectedProducts: [],
       });
     }
@@ -412,6 +419,7 @@ const Categories = () => {
           meta_description: subCategoryFormData.metaDescription.trim(),
           sort_order: Number.isFinite(subCategoryFormData.sort_order) ? subCategoryFormData.sort_order : 0,
           category: selectedCategoryId,
+          additional_categories: subCategoryFormData.linkedCategoryIds.filter((id) => id !== selectedCategoryId),
         });
         toast.success('Subcategory updated successfully');
       } else {
@@ -425,6 +433,7 @@ const Categories = () => {
           meta_description: subCategoryFormData.metaDescription.trim(),
           sort_order: Number.isFinite(subCategoryFormData.sort_order) ? subCategoryFormData.sort_order : 0,
           category: selectedCategoryId,
+          additional_categories: subCategoryFormData.linkedCategoryIds.filter((id) => id !== selectedCategoryId),
         });
         targetSubId = created.id;
         toast.success('Subcategory created successfully');
@@ -529,6 +538,17 @@ const Categories = () => {
       setOptionEditData({ name: '', slug: '', color_code: '' });
     } else {
       toast.error('Filter type not found');
+    }
+  };
+
+  const handleUnlinkSubCategory = async (subcategory: SubCategory, categoryId: number) => {
+    if (!confirm('Remove this subcategory from only this category? It will stay linked everywhere else.')) return;
+    try {
+      await apiPost(`/subcategories/${subcategory.id}/unlink-category/`, { category: categoryId });
+      toast.success('Subcategory removed from this category only');
+      await loadData();
+    } catch {
+      toast.error('Failed to remove subcategory from this category');
     }
   };
 
@@ -783,6 +803,9 @@ const Categories = () => {
                           <div className="flex-1">
                             <div className="font-medium text-lg">{sub.name}</div>
                             <p className="text-xs text-muted-foreground mt-1">
+                              {sub.category === category.id ? 'Main category' : 'Also linked here'}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
                               Display order: {Number(sub.sort_order) || 0}
                             </p>
                             <p
@@ -805,7 +828,11 @@ const Categories = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => handleDeleteSubCategory(sub.id)}
+                              onClick={() =>
+                                getLinkedCategoryIds(sub).length > 1
+                                  ? handleUnlinkSubCategory(sub, category.id)
+                                  : handleDeleteSubCategory(sub.id)
+                              }
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
@@ -1144,6 +1171,52 @@ const Categories = () => {
                   onChange={(e) => setSubCategoryFormData({ ...subCategoryFormData, name: e.target.value })}
                   placeholder="e.g. Storage Divans"
                 />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Main Category *</label>
+                <select
+                  className="w-full rounded-md border border-input px-3 py-2 text-sm bg-white"
+                  value={selectedCategoryId ?? ''}
+                  onChange={(e) => setSelectedCategoryId(e.target.value ? Number(e.target.value) : null)}
+                >
+                  <option value="">Select main category</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Also Show Under</label>
+                <div className="grid gap-2 rounded-md border border-input p-3 max-h-48 overflow-y-auto">
+                  {categories.map((category) => {
+                    const checked = subCategoryFormData.linkedCategoryIds.includes(category.id);
+                    return (
+                      <label key={category.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={category.id === selectedCategoryId}
+                          onChange={(e) =>
+                            setSubCategoryFormData((prev) => ({
+                              ...prev,
+                              linkedCategoryIds: e.target.checked
+                                ? [...prev.linkedCategoryIds, category.id]
+                                : prev.linkedCategoryIds.filter((id) => id !== category.id),
+                            }))
+                          }
+                        />
+                        <span>{category.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Add existing subcategories under extra main categories without losing products or data.
+                </p>
               </div>
 
               <div className="grid gap-2">

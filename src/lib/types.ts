@@ -16,6 +16,9 @@ export interface Category {
 export interface SubCategory {
   id: number;
   category: number;
+  additional_categories?: number[];
+  linked_category_ids?: number[];
+  main_category_name?: string;
   name: string;
   slug: string;
   description: string;

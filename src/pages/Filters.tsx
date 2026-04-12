@@ -18,6 +18,10 @@ const toSafeSlug = (value: string) =>
     .replace(/^-|-$/g, '');
 
 const Filters = () => {
+  const subcategoryMatchesCategory = (subcategory: SubCategory, categoryId: number) =>
+    Number(subcategory.category) === Number(categoryId) ||
+    (subcategory.linked_category_ids || []).map(Number).includes(Number(categoryId));
+
   const [filterTypes, setFilterTypes] = useState<FilterType[]>([]);
   const [categoryFilters, setCategoryFilters] = useState<CategoryFilter[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -53,7 +57,7 @@ const Filters = () => {
   const filteredSubcategories = useMemo(() => {
     if (!categoryFilterForm.category) return subcategories;
     const catId = Number(categoryFilterForm.category);
-    return subcategories.filter((s) => s.category === catId);
+    return subcategories.filter((s) => subcategoryMatchesCategory(s, catId));
   }, [categoryFilterForm.category, subcategories]);
 
   const loadData = async () => {

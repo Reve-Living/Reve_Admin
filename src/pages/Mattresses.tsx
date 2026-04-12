@@ -60,6 +60,10 @@ const getMattressScopeLabel = (
   return labels.length > 0 ? labels.join(" | ") : "All categories";
 };
 
+const subcategoryMatchesCategory = (subcategory: ApiSubCategory, categoryId: number) =>
+  Number(subcategory.category) === Number(categoryId) ||
+  (subcategory.linked_category_ids || []).map(Number).includes(Number(categoryId));
+
 const Mattresses = () => {
   const [items, setItems] = useState<MattressOption[]>([]);
   const [editing, setEditing] = useState<MattressOption>(emptyOption());
@@ -239,7 +243,7 @@ const Mattresses = () => {
             <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
               {categories.map((cat) => {
                 const checked = (editing.categories || []).includes(cat.id);
-                const subs = subcategories.filter((s) => s.category === cat.id);
+                const subs = subcategories.filter((s) => subcategoryMatchesCategory(s, cat.id));
                 return (
                   <div key={cat.id} className="rounded-md border border-border/60 bg-ivory/60 p-2 space-y-1">
                     <label className="flex items-center gap-2 text-sm font-medium text-espresso">
