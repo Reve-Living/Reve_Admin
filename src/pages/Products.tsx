@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
-import { Edit, Eye, EyeOff, Trash2 } from 'lucide-react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { apiDelete, apiGet, apiPatch } from '../lib/api';
+import { Copy, Edit, Eye, EyeOff, Trash2 } from 'lucide-react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { apiDelete, apiGet, apiPatch, apiPost } from '../lib/api';
 import type { Product, Category, SubCategory } from '../lib/types';
 import { toast } from 'sonner';
 
 const Products = () => {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -88,6 +89,16 @@ const Products = () => {
       await loadData();
     } catch {
       toast.error('Failed to update product visibility');
+    }
+  };
+
+  const handleDuplicate = async (product: Product) => {
+    try {
+      const duplicated = await apiPost<Product>(`/products/${product.id}/duplicate/`, {});
+      toast.success('Product duplicated. The copy is hidden until you finish editing it.');
+      navigate(`/products/${duplicated.id}`);
+    } catch {
+      toast.error('Failed to duplicate product');
     }
   };
 
@@ -254,6 +265,14 @@ const Products = () => {
                     </span>
                   </TableCell>
                   <TableCell className="text-right space-x-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Duplicate product"
+                      onClick={() => handleDuplicate(product)}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"

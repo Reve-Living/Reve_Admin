@@ -3,7 +3,7 @@ import * as z from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Plus, Trash2, ArrowLeft, Search } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, ArrowUp, ArrowDown, GripVertical, Search } from 'lucide-react';
 import { useLocation, useNavigate, useParams, Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -134,6 +134,7 @@ const productSchema = z.object({
           color_name: z.string().optional().nullable(),
           style_name: z.string().optional().nullable(),
           alt_text: z.string().optional().nullable(),
+          sort_order: z.number().optional().nullable(),
         })
       )
       .optional(),
@@ -559,7 +560,7 @@ const ProductForm = () => {
   const importAutocompleteRef = useRef<HTMLDivElement | null>(null);
   const returnToProducts = location.search ? `/products${location.search}` : '/products';
 
-  const { register, control, handleSubmit, formState: { errors }, setValue, watch } = useForm<ProductFormValues>({
+  const { register, control, handleSubmit, formState: { errors }, setValue, watch, getValues } = useForm<ProductFormValues>({
     resolver: zodResolver(productSchema),
     defaultValues: {
       short_description: '',
@@ -730,6 +731,36 @@ const ProductForm = () => {
     name: "videos"
   });
 
+  const normalizeImageSortOrders = (
+    images: Array<{ url?: string | null; color_name?: string | null; style_name?: string | null; alt_text?: string | null; sort_order?: number | null }>
+  ) =>
+    images.map((image, index) => ({
+      ...image,
+      sort_order: index + 1,
+    }));
+
+  const replaceImageOrder = (
+    images: Array<{ url?: string | null; color_name?: string | null; style_name?: string | null; alt_text?: string | null; sort_order?: number | null }>
+  ) => {
+    replaceImages(normalizeImageSortOrders(images));
+  };
+
+  const moveImageToIndex = (fromIndex: number, toIndex: number) => {
+    const currentImages = [...(getValues('images') || [])];
+    if (
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= currentImages.length ||
+      toIndex >= currentImages.length ||
+      fromIndex === toIndex
+    ) {
+      return;
+    }
+    const [movedImage] = currentImages.splice(fromIndex, 1);
+    currentImages.splice(toIndex, 0, movedImage);
+    replaceImageOrder(currentImages);
+  };
+
   const { fields: styleFields, append: appendStyle, remove: removeStyle, replace: replaceStyles } = useFieldArray({
     control,
     name: "styles"
@@ -737,6 +768,7 @@ const ProductForm = () => {
   // legacy importProductId no longer used (kept for compatibility if needed)
   const [styleLibrary, setStyleLibrary] = useState<StyleLibraryItem[]>([]);
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
+  const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
 
   const { fields: sizeFields, append: appendSize, remove: removeSize, replace: replaceSizes } = useFieldArray({
     control,
@@ -997,12 +1029,15 @@ const ProductForm = () => {
         setValue('slug', product.slug || '');
         setValue('meta_title', product.meta_title || '');
         setValue('meta_description', product.meta_description || '');
-        const images = product.images.map((i) => ({
-          url: i.url,
-          color_name: i.color_name || '',
-          style_name: i.style_name || '',
-          alt_text: i.alt_text || '',
-        }));
+        const images = [...product.images]
+          .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) || (a.id || 0) - (b.id || 0))
+          .map((i, index) => ({
+            url: i.url,
+            color_name: i.color_name || '',
+            style_name: i.style_name || '',
+            alt_text: i.alt_text || '',
+            sort_order: Number(i.sort_order) || index + 1,
+          }));
         const videos = product.videos.map((v) => ({ url: v.url }));
         const colors = product.colors.map((c) => ({
           name: c.name,
@@ -1489,7 +1524,15 @@ const ProductForm = () => {
     setIsUploading(true);
     try {
       const uploaded = await Promise.all(files.map((file) => apiUpload('/uploads/', file)));
-      uploaded.forEach((res) => appendImage({ url: res.url, color_name: '', style_name: '', alt_text: '' }));
+      uploaded.forEach((res, index) =>
+        appendImage({
+          url: res.url,
+          color_name: '',
+          style_name: '',
+          alt_text: '',
+          sort_order: imageFields.length + index + 1,
+        })
+      );
       toast.success(`${uploaded.length} image${uploaded.length > 1 ? 's' : ''} uploaded`);
     } catch {
       toast.error('Some images failed to upload');
@@ -1557,11 +1600,12 @@ const ProductForm = () => {
         discount_percentage: Number.isFinite(discountPercentage) ? discountPercentage : 0,
         original_price: Number.isFinite(computedOriginalPrice) ? computedOriginalPrice : null,
         images: (data.images || [])
-          .map((img) => ({
+          .map((img, index) => ({
             url: (img.url || '').trim(),
             color_name: (img.color_name || '').trim(),
             style_name: (img.style_name || '').trim(),
             alt_text: (img.alt_text || '').trim(),
+            sort_order: index + 1,
           }))
           .filter((img) => img.url.length > 0),
         videos: (data.videos || []).filter((vid) => (vid.url || '').trim().length > 0),
@@ -2004,7 +2048,15 @@ const ProductForm = () => {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => appendImage({ url: '', color_name: '', style_name: '', alt_text: '' })}
+                onClick={() =>
+                  appendImage({
+                    url: '',
+                    color_name: '',
+                    style_name: '',
+                    alt_text: '',
+                    sort_order: imageFields.length + 1,
+                  })
+                }
               >
                 <Plus className="h-4 w-4 mr-2" /> Add Image
               </Button>
@@ -2031,7 +2083,79 @@ const ProductForm = () => {
                   )
                 );
                 return (
-                <div key={field.id} className="space-y-2">
+                <div
+                  key={field.id}
+                  className={`space-y-2 rounded-lg border p-3 transition ${
+                    draggedImageIndex === index ? 'border-primary/60 bg-primary/5' : 'border-border/70 bg-background'
+                  }`}
+                  draggable
+                  onDragStart={() => setDraggedImageIndex(index)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (draggedImageIndex !== null) {
+                      moveImageToIndex(draggedImageIndex, index);
+                    }
+                    setDraggedImageIndex(null);
+                  }}
+                  onDragEnd={() => setDraggedImageIndex(null)}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <GripVertical className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">Image {index + 1}</span>
+                      {index === 0 && (
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                          Main image
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={index === 0}
+                        onClick={() => moveImageToIndex(index, 0)}
+                      >
+                        Set Main
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        disabled={index === 0}
+                        onClick={() => moveImageToIndex(index, index - 1)}
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        disabled={index === imageFields.length - 1}
+                        onClick={() => moveImageToIndex(index, index + 1)}
+                      >
+                        <ArrowDown className="h-4 w-4" />
+                      </Button>
+                      <select
+                        className="rounded-md border border-input bg-white px-2 py-1 text-sm"
+                        value={index + 1}
+                        onChange={(e) => moveImageToIndex(index, Number(e.target.value) - 1)}
+                      >
+                        {imageFields.map((_, positionIndex) => (
+                          <option key={positionIndex} value={positionIndex + 1}>
+                            Position {positionIndex + 1}
+                          </option>
+                        ))}
+                      </select>
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeImage(index)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Drag this card to reorder it, or move it to an exact position. The first image is always the main image.
+                  </p>
                   <div className="flex gap-2">
                     <Input 
                       type="file"
@@ -2044,11 +2168,6 @@ const ProductForm = () => {
                       }}
                       className="cursor-pointer bg-black/5"
                     />
-                    {index > 0 && (
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeImage(index)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    )}
                   </div>
                   {watch(`images.${index}.url`) && (
                     <img src={watch(`images.${index}.url`) || undefined} alt={`Preview ${index + 1}`} className="h-32 w-32 rounded-md border bg-black/5 object-cover" />
