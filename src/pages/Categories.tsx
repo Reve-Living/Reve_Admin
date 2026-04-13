@@ -40,6 +40,7 @@ const Categories = () => {
   const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingFilter, setIsSavingFilter] = useState(false);
+  const [promotingSubcategoryIds, setPromotingSubcategoryIds] = useState<Set<number>>(new Set());
 
   const [categoryName, setCategoryName] = useState('');
   const [categorySlug, setCategorySlug] = useState('');
@@ -552,6 +553,43 @@ const Categories = () => {
     }
   };
 
+  const handlePromoteSubCategory = async (subcategory: SubCategory) => {
+    if (
+      !confirm(
+        `Make "${subcategory.name}" its own main category? This will move its products and related links out of the subcategory and delete the old subcategory record.`
+      )
+    ) {
+      return;
+    }
+
+    setPromotingSubcategoryIds((prev) => new Set(prev).add(subcategory.id));
+    try {
+      const response = await apiPost<{
+        category?: { name?: string };
+        migrated?: {
+          products?: number;
+          category_filters?: number;
+          promotions?: number;
+          mattress_options?: number;
+          hero_slides?: number;
+        };
+      }>(`/subcategories/${subcategory.id}/promote-to-category/`, {});
+
+      const promotedName = response.category?.name || subcategory.name;
+      const migratedProducts = response.migrated?.products ?? 0;
+      toast.success(`${promotedName} is now a main category. ${migratedProducts} product${migratedProducts === 1 ? '' : 's'} moved.`);
+      await loadData();
+    } catch {
+      toast.error('Failed to promote subcategory');
+    } finally {
+      setPromotingSubcategoryIds((prev) => {
+        const next = new Set(prev);
+        next.delete(subcategory.id);
+        return next;
+      });
+    }
+  };
+
   const startEditingOption = (option: FilterOption) => {
     setEditingOption(option);
     setOptionEditData({
@@ -791,6 +829,7 @@ const Categories = () => {
                       const productIds = products
                         .filter((p) => p.subcategory === sub.id)
                         .map((p) => p.id);
+                      const isPromoting = promotingSubcategoryIds.has(sub.id);
                       return (
                         <div key={sub.id} className="flex items-start gap-4 p-4 bg-gray-50 rounded-lg border">
                           {sub.image && (
@@ -821,6 +860,16 @@ const Categories = () => {
                             <Button
                               variant="ghost"
                               size="icon"
+                              title="Make main category"
+                              disabled={isPromoting}
+                              onClick={() => handlePromoteSubCategory(sub)}
+                            >
+                              <FolderPlus className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              disabled={isPromoting}
                               onClick={() => openSubCategoryModal(category.id, sub)}
                             >
                               <Edit className="h-4 w-4" />
@@ -828,6 +877,7 @@ const Categories = () => {
                             <Button
                               variant="ghost"
                               size="icon"
+                              disabled={isPromoting}
                               onClick={() =>
                                 getLinkedCategoryIds(sub).length > 1
                                   ? handleUnlinkSubCategory(sub, category.id)
