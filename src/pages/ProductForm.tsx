@@ -538,6 +538,8 @@ const ProductForm = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const duplicateFlowState = (location.state as { autoRevealOnSave?: boolean } | null) ?? null;
+  const autoRevealOnSave = duplicateFlowState?.autoRevealOnSave === true;
   const isEditing = Boolean(id);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<SubCategory[]>([]);
@@ -1021,7 +1023,7 @@ const ProductForm = () => {
         setValue('delivery_charges', Number(product.delivery_charges) || 0);
         setValue('assembly_service_enabled', product.assembly_service_enabled === true);
         setValue('assembly_service_price', Number(product.assembly_service_price) || 0);
-        setValue('is_hidden', product.is_hidden === true);
+        setValue('is_hidden', autoRevealOnSave ? false : product.is_hidden === true);
         setValue('is_bestseller', product.is_bestseller);
         setValue('is_new', product.is_new);
         setValue('show_size_icons', product.show_size_icons !== false);
@@ -1160,7 +1162,7 @@ const ProductForm = () => {
       }
     };
     loadProduct();
-  }, [id, categories, subcategories, setValue, replaceImages, replaceVideos, replaceColors, replaceSizes, replaceStyles, replaceFabrics, replaceFaqs, replaceDimensions, replaceInfoSections, replaceFilterValues]);
+  }, [id, categories, subcategories, autoRevealOnSave, setValue, replaceImages, replaceVideos, replaceColors, replaceSizes, replaceStyles, replaceFabrics, replaceFaqs, replaceDimensions, replaceInfoSections, replaceFilterValues]);
 
   useEffect(() => {
     if (!id) return;
@@ -1592,7 +1594,7 @@ const ProductForm = () => {
           data.assembly_service_enabled && Number.isFinite(data.assembly_service_price ?? null)
             ? Number(data.assembly_service_price)
             : 0,
-        is_hidden: data.is_hidden === true,
+        is_hidden: autoRevealOnSave ? false : data.is_hidden === true,
         show_size_icons: data.show_size_icons !== false,
         sort_order: Number.isFinite(data.sort_order) ? Number(data.sort_order) : 0,
         short_description: data.short_description.trim(),
