@@ -3,6 +3,10 @@ const API_BASE_URL =
   "https://reve-backend.onrender.com/api";
 
 const getAuthToken = () => localStorage.getItem("admin_token");
+const mutationInFlight = new Map<string, Promise<unknown>>();
+
+const getMutationKey = (method: string, path: string, body?: unknown) =>
+  `${method}:${path}:${body === undefined ? "" : JSON.stringify(body)}`;
 
 const buildHeaders = (hasBody: boolean) => {
   const headers: Record<string, string> = {};
@@ -14,6 +18,39 @@ const buildHeaders = (hasBody: boolean) => {
     headers.Authorization = `Bearer ${token}`;
   }
   return headers;
+};
+
+const runMutation = async <T>(
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
+  path: string,
+  body?: unknown
+): Promise<T> => {
+  const key = getMutationKey(method, path, body);
+  const existing = mutationInFlight.get(key);
+  if (existing) {
+    return existing as Promise<T>;
+  }
+
+  const request = fetch(`${API_BASE_URL}${path}`, {
+    method,
+    headers: buildHeaders(body !== undefined),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      if (method === "DELETE" || res.status === 204) {
+        return undefined as T;
+      }
+      return res.json() as Promise<T>;
+    })
+    .finally(() => {
+      mutationInFlight.delete(key);
+    });
+
+  mutationInFlight.set(key, request);
+  return request;
 };
 
 export const apiGet = async <T>(path: string): Promise<T> => {
@@ -28,49 +65,19 @@ export const apiGet = async <T>(path: string): Promise<T> => {
 };
 
 export const apiPost = async <T>(path: string, body: unknown): Promise<T> => {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: "POST",
-    headers: buildHeaders(true),
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(await res.text());
-  }
-  return res.json();
+  return runMutation<T>("POST", path, body);
 };
 
 export const apiPut = async <T>(path: string, body: unknown): Promise<T> => {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: "PUT",
-    headers: buildHeaders(true),
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(await res.text());
-  }
-  return res.json();
+  return runMutation<T>("PUT", path, body);
 };
 
 export const apiPatch = async <T>(path: string, body: unknown): Promise<T> => {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: "PATCH",
-    headers: buildHeaders(true),
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new Error(await res.text());
-  }
-  return res.json();
+  return runMutation<T>("PATCH", path, body);
 };
 
 export const apiDelete = async (path: string): Promise<void> => {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method: "DELETE",
-    headers: buildHeaders(false),
-  });
-  if (!res.ok) {
-    throw new Error(await res.text());
-  }
+  await runMutation<void>("DELETE", path);
 };
 
 export const apiUpload = async (path: string, file: File): Promise<{ url: string }> => {
