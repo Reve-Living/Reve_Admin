@@ -96,7 +96,7 @@ const Products = () => {
     try {
       const duplicated = await apiPost<Product>(`/products/${product.id}/duplicate/`, {});
       toast.success('Product duplicated. The copy is hidden until you finish editing it.');
-      navigate(`/products/${duplicated.id}`);
+      navigate(`/products/edit/${duplicated.id}${productFormSearch}`);
     } catch {
       toast.error('Failed to duplicate product');
     }
