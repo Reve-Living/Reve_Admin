@@ -254,6 +254,7 @@ const productSchema = z.object({
         })
       )
       .optional(),
+    suggested_products: z.array(z.number()).optional(),
   });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -559,6 +560,9 @@ const ProductForm = () => {
   const [loadedProductCategory, setLoadedProductCategory] = useState<number | null>(null);
   const [loadedProductSubcategory, setLoadedProductSubcategory] = useState<number | null>(null);
   const [appliedInitialFilters, setAppliedInitialFilters] = useState(false);
+  const [suggestionSearch, setSuggestionSearch] = useState('');
+  const [suggestionCategoryFilter, setSuggestionCategoryFilter] = useState<'all' | number>('all');
+  const [suggestionSubcategoryFilter, setSuggestionSubcategoryFilter] = useState<'all' | number>('all');
   const importAutocompleteRef = useRef<HTMLDivElement | null>(null);
   const returnToProducts = location.search ? `/products${location.search}` : '/products';
 
@@ -599,6 +603,7 @@ const ProductForm = () => {
       returns_title: '',
       custom_info_sections: [],
       filter_values: [],
+      suggested_products: [],
     }
   });
 
@@ -654,6 +659,53 @@ const ProductForm = () => {
     () => importProductOptions.find((product) => product.id === selectedImportProductId) || null,
     [importProductOptions, selectedImportProductId]
   );
+  const selectedSuggestedProducts = watch('suggested_products') || [];
+  const suggestionFilterSubcategories = useMemo(() => {
+    if (suggestionCategoryFilter === 'all') return subcategories;
+    return subcategories.filter((subcategory) => subcategoryMatchesCategory(subcategory, suggestionCategoryFilter));
+  }, [subcategories, suggestionCategoryFilter]);
+  const suggestionCandidates = useMemo(() => {
+    const query = suggestionSearch.trim().toLowerCase();
+    const editingId = Number(id || 0);
+
+    return (importProductOptions || []).filter((product) => {
+      if (editingId > 0 && product.id === editingId) return false;
+      if (suggestionCategoryFilter !== 'all') {
+        const productCategoryId = resolveCategoryId(product, categories);
+        if (Number(productCategoryId || 0) !== Number(suggestionCategoryFilter)) return false;
+      }
+      if (suggestionSubcategoryFilter !== 'all') {
+        const productSubcategoryId = resolveSubcategoryId(product, subcategories);
+        if (Number(productSubcategoryId || 0) !== Number(suggestionSubcategoryFilter)) return false;
+      }
+      if (!query) return true;
+
+      const haystack = [
+        product.name,
+        product.slug,
+        product.category_name,
+        product.subcategory_name,
+        String(product.id || ''),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+  }, [
+    categories,
+    id,
+    importProductOptions,
+    subcategories,
+    suggestionCategoryFilter,
+    suggestionSearch,
+    suggestionSubcategoryFilter,
+  ]);
+  const selectedSuggestedProductSummaries = useMemo(() => {
+    const selectedIds = new Set((selectedSuggestedProducts || []).map(Number));
+    return importProductOptions.filter((product) => selectedIds.has(Number(product.id)));
+  }, [importProductOptions, selectedSuggestedProducts]);
 
   const deriveDimensionColumnsFromRows = (rows: ProductDimensionRow[]) => {
     const discoveredColumns = Array.from(
@@ -1144,6 +1196,10 @@ const ProductForm = () => {
         const filterValues =
           filterValuesFromFlatList.length > 0 ? filterValuesFromFlatList : filterValuesFromGroupedFilters;
         replaceFilterValues(filterValues);
+        setValue(
+          'suggested_products',
+          Array.isArray(product.suggested_products) ? product.suggested_products.map((item) => Number(item)) : []
+        );
         setFilterValuesDirty(false);
         replaceImages(images);
         replaceVideos(videos);
@@ -1726,6 +1782,9 @@ const ProductForm = () => {
             return Number.isFinite(id) && id > 0 ? { filter_option: id } : null;
           })
           .filter(Boolean) as { filter_option: number }[],
+        suggested_products: Array.from(
+          new Set((data.suggested_products || []).map((item) => Number(item)).filter((item) => Number.isFinite(item) && item > 0))
+        ),
       };
       if (!payload.images || payload.images.length === 0) {
         if (isEditing) {
@@ -3484,6 +3543,122 @@ const ProductForm = () => {
                   </div>
                 );
               })()}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium">Suggested products</p>
+                  <p className="text-xs text-muted-foreground">
+                    Choose the products that should appear in the “You May Also Like” box for this product.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setValue('suggested_products', [])}
+                  disabled={selectedSuggestedProducts.length === 0}
+                >
+                  Clear
+                </Button>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="grid gap-2 md:col-span-2">
+                  <label className="text-xs font-medium text-muted-foreground">Search products</label>
+                  <Input
+                    value={suggestionSearch}
+                    onChange={(e) => setSuggestionSearch(e.target.value)}
+                    placeholder="Search by name, slug, category, subcategory, or ID"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-xs font-medium text-muted-foreground">Category filter</label>
+                  <select
+                    className="h-11 rounded-md border border-input bg-background px-3 text-sm"
+                    value={suggestionCategoryFilter === 'all' ? '' : suggestionCategoryFilter}
+                    onChange={(e) => {
+                      const next = e.target.value ? Number(e.target.value) : 'all';
+                      setSuggestionCategoryFilter(next);
+                      setSuggestionSubcategoryFilter('all');
+                    }}
+                  >
+                    <option value="">All categories</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid gap-2">
+                  <label className="text-xs font-medium text-muted-foreground">Subcategory filter</label>
+                  <select
+                    className="h-11 rounded-md border border-input bg-background px-3 text-sm"
+                    value={suggestionSubcategoryFilter === 'all' ? '' : suggestionSubcategoryFilter}
+                    onChange={(e) => setSuggestionSubcategoryFilter(e.target.value ? Number(e.target.value) : 'all')}
+                  >
+                    <option value="">All subcategories</option>
+                    {suggestionFilterSubcategories.map((subcategory) => (
+                      <option key={subcategory.id} value={subcategory.id}>
+                        {subcategory.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                  {selectedSuggestedProducts.length} selected
+                  {selectedSuggestedProductSummaries.length > 0
+                    ? `: ${selectedSuggestedProductSummaries
+                        .slice(0, 4)
+                        .map((product) => product.name)
+                        .join(', ')}${selectedSuggestedProductSummaries.length > 4 ? '...' : ''}`
+                    : ''}
+                </div>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto rounded-md border border-input bg-white px-3 py-2 space-y-2">
+                {suggestionCandidates.map((product) => {
+                  const checked = selectedSuggestedProducts.includes(product.id);
+                  const categoryLabel =
+                    categories.find((category) => category.id === resolveCategoryId(product, categories))?.name ||
+                    product.category_name ||
+                    'Uncategorized';
+                  const subcategoryLabel =
+                    subcategories.find((subcategory) => subcategory.id === resolveSubcategoryId(product, subcategories))?.name ||
+                    product.subcategory_name ||
+                    '';
+
+                  return (
+                    <label key={product.id} className="flex items-start gap-3 rounded-md border border-border/60 px-3 py-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          const next = new Set(selectedSuggestedProducts.map(Number));
+                          if (e.target.checked) next.add(product.id);
+                          else next.delete(product.id);
+                          setValue('suggested_products', Array.from(next), { shouldDirty: true });
+                        }}
+                        className="mt-1"
+                      />
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground">{product.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          #{product.id} • {categoryLabel}{subcategoryLabel ? ` / ${subcategoryLabel}` : ''}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })}
+                {suggestionCandidates.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No products match the current filters.</p>
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>

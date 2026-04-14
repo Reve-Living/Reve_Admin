@@ -303,6 +303,8 @@ export interface Product {
     }[];
   }[];
   filter_values?: { filter_option_id?: number; filter_option?: number; filter_type?: string; option?: string }[];
+  suggested_products?: number[];
+  suggested_products_data?: Product[];
 }
 
 export interface OrderItem {
