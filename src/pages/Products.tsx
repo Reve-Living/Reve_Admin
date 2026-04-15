@@ -44,7 +44,7 @@ const Products = () => {
   const loadData = async () => {
     try {
       const [productsData, categoriesData] = await Promise.all([
-        apiGet<Product[] | { results?: Product[] }>('/products/'),
+        apiGet<Product[] | { results?: Product[] }>('/products/?summary=1'),
         apiGet<Category[] | { results?: Category[] }>('/categories/'),
       ]);
 
