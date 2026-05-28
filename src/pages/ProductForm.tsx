@@ -203,6 +203,7 @@ const productSchema = z.object({
           price_top: z.number().nullable().optional(),
           price_bottom: z.number().nullable().optional(),
           price_both: z.number().nullable().optional(),
+          is_hidden: z.boolean().optional(),
           source_product: z.number().nullable().optional(),
         })
       )
@@ -446,6 +447,7 @@ const buildVisibleMattressRows = (
       price_top: normalizeMattressNumber(override?.price_top ?? mattress.price_top),
       price_bottom: normalizeMattressNumber(override?.price_bottom ?? mattress.price_bottom),
       price_both: normalizeMattressNumber(override?.price_both ?? mattress.price_both),
+      is_hidden: Boolean(override?.is_hidden),
       source_product: null,
     };
   });
@@ -481,6 +483,7 @@ const buildMattressOverridePayload = (
       const nextBottom = normalizeMattressNumber(mattress.price_bottom);
       const nextBoth = normalizeMattressNumber(mattress.price_both);
       const nextBunk = Boolean(mattress.enable_bunk_positions);
+      const nextHidden = Boolean(mattress.is_hidden);
 
       const baseDescription = normalizeMattressText(base.description);
       const baseImage = normalizeMattressText(base.image_url);
@@ -491,6 +494,7 @@ const buildMattressOverridePayload = (
       const baseBunk = Boolean(base.enable_bunk_positions);
 
       const hasOverride =
+        nextHidden ||
         nextDescription !== baseDescription ||
         nextImage !== baseImage ||
         nextPrice !== basePrice ||
@@ -510,6 +514,7 @@ const buildMattressOverridePayload = (
         price_top: nextTop,
         price_bottom: nextBottom,
         price_both: nextBoth,
+        is_hidden: nextHidden,
         source_product: null,
       };
     })
@@ -1137,6 +1142,7 @@ const ProductForm = () => {
           price_top: m.price_top !== undefined && m.price_top !== null ? Number(m.price_top) : null,
           price_bottom: m.price_bottom !== undefined && m.price_bottom !== null ? Number(m.price_bottom) : null,
           price_both: m.price_both !== undefined && m.price_both !== null ? Number(m.price_both) : null,
+          is_hidden: m.is_hidden ?? false,
           source_product: m.source_product || null,
         }));
         setLoadedProductMattresses(mattresses);
@@ -1261,6 +1267,22 @@ const ProductForm = () => {
     setValue('mattresses', scopedCategoryMattresses);
     replaceMattresses(scopedCategoryMattresses);
   }, [replaceMattresses, scopedCategoryMattresses, setValue]);
+
+  const watchedMattresses = watch('mattresses') || [];
+  const visibleMattressEntries = useMemo(
+    () =>
+      mattressFields
+        .map((field, index) => ({ field, index }))
+        .filter(({ index }) => !watchedMattresses[index]?.is_hidden),
+    [mattressFields, watchedMattresses]
+  );
+  const hiddenMattressEntries = useMemo(
+    () =>
+      mattressFields
+        .map((field, index) => ({ field, index }))
+        .filter(({ index }) => Boolean(watchedMattresses[index]?.is_hidden)),
+    [mattressFields, watchedMattresses]
+  );
 
   const handleUpload = async (file: File, onSuccess: (url: string) => void, inlineSvgPreferred = false) => {
     setIsUploading(true);
@@ -2753,19 +2775,37 @@ const ProductForm = () => {
                   No category mattresses found yet. Add mattresses in the Mattresses page for this category first.
                 </p>
               )}
-              {mattressFields.length > 0 && (
+              {mattressFields.length > 0 && visibleMattressEntries.length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  These mattresses come from the Mattresses page for the selected category. Edit only the product-specific override fields here.
+                  These mattresses come from the Mattresses page for the selected category. Edit only the product-specific override fields here, or remove one for this product only.
+                </p>
+              )}
+              {mattressFields.length > 0 && visibleMattressEntries.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  All category mattresses are currently removed for this product. Restore one below if needed.
                 </p>
               )}
               <div className="space-y-3">
-                {mattressFields.map((field, index) => (
-                  <div key={field.id} className="space-y-3 rounded-md border p-3">
+                {visibleMattressEntries.map(({ field, index }) => (
+                  <div key={field.id} className="relative space-y-3 rounded-md border p-3">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-2 top-2"
+                      onClick={() => {
+                        const mattressName = watchedMattresses[index]?.name || `Mattress ${index + 1}`;
+                        if (!window.confirm(`Remove ${mattressName} from this product?`)) return;
+                        setValue(`mattresses.${index}.is_hidden`, true, { shouldDirty: true });
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
                     <div className="grid grid-cols-2 gap-2">
                       <Input
                         {...register(`mattresses.${index}.name` as const)}
                         placeholder="Mattress name"
-                        className="col-span-1"
+                        className="col-span-1 pr-10"
                         readOnly
                       />
                       <Input
@@ -2839,6 +2879,26 @@ const ProductForm = () => {
                   </div>
                 ))}
               </div>
+              {hiddenMattressEntries.length > 0 && (
+                <div className="space-y-2 rounded-md border border-dashed p-3">
+                  <p className="text-xs text-muted-foreground">
+                    Removed from this product only. Restore any mattress here before saving if you change your mind.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {hiddenMattressEntries.map(({ field, index }) => (
+                      <Button
+                        key={field.id}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setValue(`mattresses.${index}.is_hidden`, false, { shouldDirty: true })}
+                      >
+                        Restore {watchedMattresses[index]?.name || `Mattress ${index + 1}`}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {styleFields.map((field, index) => (

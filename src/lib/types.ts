@@ -214,6 +214,7 @@ export interface ProductMattress {
   price_top?: number | null;
   price_bottom?: number | null;
   price_both?: number | null;
+  is_hidden?: boolean;
   source_product?: number | null;
   source_product_name?: string | null;
   source_product_slug?: string | null;
