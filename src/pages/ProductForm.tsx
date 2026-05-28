@@ -845,7 +845,7 @@ const ProductForm = () => {
     name: "fabrics"
   });
 
-  const { fields: mattressFields, replace: replaceMattresses } = useFieldArray({
+  const { fields: mattressFields, replace: replaceMattresses, update: updateMattress } = useFieldArray({
     control,
     name: "mattresses"
   });
@@ -1283,6 +1283,20 @@ const ProductForm = () => {
         .filter(({ index }) => Boolean(watchedMattresses[index]?.is_hidden)),
     [mattressFields, watchedMattresses]
   );
+
+  const setMattressHiddenState = (index: number, isHidden: boolean) => {
+    const currentMattress = (getValues('mattresses') || [])[index];
+    if (!currentMattress) return;
+
+    updateMattress(index, {
+      ...currentMattress,
+      is_hidden: isHidden,
+    });
+    setValue(`mattresses.${index}.is_hidden`, isHidden, {
+      shouldDirty: true,
+      shouldTouch: true,
+    });
+  };
 
   const handleUpload = async (file: File, onSuccess: (url: string) => void, inlineSvgPreferred = false) => {
     setIsUploading(true);
@@ -2788,6 +2802,7 @@ const ProductForm = () => {
               <div className="space-y-3">
                 {visibleMattressEntries.map(({ field, index }) => (
                   <div key={field.id} className="relative space-y-3 rounded-md border p-3">
+                    <input type="hidden" {...register(`mattresses.${index}.is_hidden` as const)} />
                     <Button
                       type="button"
                       variant="ghost"
@@ -2796,7 +2811,7 @@ const ProductForm = () => {
                       onClick={() => {
                         const mattressName = watchedMattresses[index]?.name || `Mattress ${index + 1}`;
                         if (!window.confirm(`Remove ${mattressName} from this product?`)) return;
-                        setValue(`mattresses.${index}.is_hidden`, true, { shouldDirty: true });
+                        setMattressHiddenState(index, true);
                       }}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
@@ -2886,15 +2901,17 @@ const ProductForm = () => {
                   </p>
                   <div className="flex flex-wrap gap-2">
                     {hiddenMattressEntries.map(({ field, index }) => (
-                      <Button
-                        key={field.id}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setValue(`mattresses.${index}.is_hidden`, false, { shouldDirty: true })}
-                      >
-                        Restore {watchedMattresses[index]?.name || `Mattress ${index + 1}`}
-                      </Button>
+                      <div key={field.id}>
+                        <input type="hidden" {...register(`mattresses.${index}.is_hidden` as const)} />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setMattressHiddenState(index, false)}
+                        >
+                          Restore {watchedMattresses[index]?.name || `Mattress ${index + 1}`}
+                        </Button>
+                      </div>
                     ))}
                   </div>
                 </div>
