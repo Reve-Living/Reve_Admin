@@ -139,7 +139,16 @@ const productSchema = z.object({
       )
       .optional(),
     videos: z.array(z.object({ url: z.string().optional().nullable() })).optional(),
-    colors: z.array(z.object({ name: z.string().optional(), hex_code: z.string().optional(), image_url: z.string().optional() })).optional(),
+    colors: z
+      .array(
+        z.object({
+          name: z.string().optional(),
+          hex_code: z.string().optional(),
+          image_url: z.string().optional(),
+          is_available: z.boolean().optional(),
+        })
+      )
+      .optional(),
     sizes: z
       .array(
         z.object({
@@ -186,6 +195,7 @@ const productSchema = z.object({
                 name: z.string().optional(),
                 hex_code: z.string().optional(),
                 image_url: z.string().optional(),
+                is_available: z.boolean().optional(),
               })
             )
             .optional(),
@@ -1102,6 +1112,7 @@ const ProductForm = () => {
           name: c.name,
           hex_code: c.hex_code || c.image || '#000000',
           image_url: c.image_url || '',
+          is_available: c.is_available ?? true,
         }));
         const styles = product.styles.map((s) => ({
           name: s.name,
@@ -1131,7 +1142,12 @@ const ProductForm = () => {
           name: f.name,
           image_url: f.image_url,
           is_shared: f.is_shared ?? false,
-          colors: f.colors || [],
+          colors: (f.colors || []).map((color) => ({
+            name: color.name || '',
+            hex_code: color.hex_code || '#000000',
+            image_url: color.image_url || '',
+            is_available: color.is_available ?? true,
+          })),
         }));
         const mattresses = (product.mattresses || []).map((m) => ({
           name: m.name || '',
@@ -1405,6 +1421,7 @@ const ProductForm = () => {
         name: c.name || '',
         hex_code: c.hex_code || '#000000',
         image_url: c.image_url || '',
+        is_available: c.is_available ?? true,
       }));
       const merged = [...(watch('colors') || []), ...colors];
       setValue('colors', merged);
@@ -1469,6 +1486,7 @@ const ProductForm = () => {
           name: c.name || '',
           hex_code: c.hex_code || '#000000',
           image_url: c.image_url || '',
+          is_available: c.is_available ?? true,
         })),
       }));
       const merged = [...(watch('fabrics') || []), ...fabrics];
@@ -1708,6 +1726,7 @@ const ProductForm = () => {
             name: (col.name || '').trim(),
             hex_code: (col.hex_code || '#000000').trim(),
             image_url: (col.image_url || '').trim(),
+            is_available: col.is_available !== false,
           }))
           .filter((col) => col.name.length > 0),
         sizes: (data.sizes || [])
@@ -1758,6 +1777,7 @@ const ProductForm = () => {
                 name: (c.name || '').trim(),
                 hex_code: (c.hex_code || '').trim(),
                 image_url: (c.image_url || '').trim(),
+                is_available: c.is_available !== false,
               }))
               .filter((c) => c.image_url.length > 0),
           }))
@@ -2584,6 +2604,14 @@ const ProductForm = () => {
                     placeholder="Custom color name (optional)"
                     className="text-sm"
                   />
+                  <select
+                    value={watch(`colors.${index}.is_available`) === false ? 'false' : 'true'}
+                    className="w-full rounded-md border bg-white px-3 py-2 text-sm"
+                    onChange={(e) => setValue(`colors.${index}.is_available`, e.target.value === 'true')}
+                  >
+                    <option value="true">Available</option>
+                    <option value="false">Out of stock</option>
+                  </select>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <Input
@@ -2620,7 +2648,12 @@ const ProductForm = () => {
                 </Button>
               </div>
               ))}
-              <Button type="button" variant="outline" size="sm" onClick={() => appendColor({ name: '', hex_code: '#000000', image_url: '' })}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => appendColor({ name: '', hex_code: '#000000', image_url: '', is_available: true })}
+              >
                 <Plus className="h-4 w-4 mr-2" /> Add Color
               </Button>
             </div>
@@ -2636,7 +2669,7 @@ const ProductForm = () => {
                       appendFabric({
                         name: '',
                         is_shared: false,
-                        colors: [{ name: '', hex_code: '', image_url: '' }],
+                        colors: [{ name: '', hex_code: '', image_url: '', is_available: true }],
                       })
                     }
                   >
@@ -2674,7 +2707,7 @@ const ProductForm = () => {
                           const current = (watch(`fabrics.${index}.colors`) || []) as any[];
                           setValue(`fabrics.${index}.colors`, [
                             ...current,
-                            { name: '', hex_code: '', image_url: '' },
+                            { name: '', hex_code: '', image_url: '', is_available: true },
                           ]);
                         }}
                       >
@@ -2709,6 +2742,11 @@ const ProductForm = () => {
                                   {color.name}
                                 </span>
                               )}
+                              {color.is_available === false && (
+                                <span className="absolute inset-x-1 bottom-1 rounded bg-white/95 px-1 py-0.5 text-center text-[9px] font-semibold uppercase tracking-wide text-rose-700">
+                                  Out
+                                </span>
+                              )}
                             </div>
                           <input
                             type="color"
@@ -2730,6 +2768,18 @@ const ProductForm = () => {
                               placeholder="Colour name"
                               className="flex-1"
                             />
+                            <select
+                              value={color.is_available === false ? 'false' : 'true'}
+                              onChange={(e) => {
+                                const current = (watch(`fabrics.${index}.colors`) || []) as any[];
+                                current[colorIdx] = { ...current[colorIdx], is_available: e.target.value === 'true' };
+                                setValue(`fabrics.${index}.colors`, current);
+                              }}
+                              className="rounded-md border bg-white px-3 py-2 text-sm"
+                            >
+                              <option value="true">Available</option>
+                              <option value="false">Out of stock</option>
+                            </select>
                             <Button
                               type="button"
                               variant="ghost"

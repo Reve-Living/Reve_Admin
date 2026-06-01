@@ -160,6 +160,7 @@ export interface ProductColor {
   hex_code?: string;
   image_url?: string;
   image?: string;
+  is_available?: boolean;
 }
 
 export interface ProductSize {
