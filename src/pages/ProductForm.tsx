@@ -1705,6 +1705,8 @@ const ProductForm = () => {
             ? Number(data.assembly_service_price)
             : 0,
         is_hidden: autoRevealOnSave ? false : data.is_hidden === true,
+        is_bestseller: data.is_bestseller === true,
+        is_new: data.is_new === true,
         show_size_icons: data.show_size_icons !== false,
         sort_order: Number.isFinite(data.sort_order) ? Number(data.sort_order) : 0,
         short_description: data.short_description.trim(),
