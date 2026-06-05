@@ -1,11 +1,106 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { Card, CardContent } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Button } from '../components/ui/button';
-import { Eye, CheckCircle, Download } from 'lucide-react';
+import { Input } from '../components/ui/input';
+import { CheckCircle, Download, Eye, Plus, Trash2 } from 'lucide-react';
 import { apiDownload, apiGet, apiPost } from '../lib/api';
-import type { Order } from '../lib/types';
+import type { Order, Product } from '../lib/types';
 import { toast } from 'sonner';
+
+type OrderAction = 'mark_paid' | 'mark_delivered';
+type ManualOrderSource = 'whatsapp' | 'phone' | 'walk_in' | 'other';
+
+type ManualOrderItem = {
+  id: string;
+  productId: string;
+  quantity: string;
+  unitPrice: string;
+  size: string;
+  color: string;
+  style: string;
+  dimension: string;
+  dimensionDetails: string;
+  extrasTotal: string;
+  assemblyServiceSelected: boolean;
+  assemblyServicePrice: string;
+};
+
+type ManualOrderFormState = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  alternativePhone: string;
+  address: string;
+  city: string;
+  postalCode: string;
+  floorNumber: string;
+  paymentMethod: string;
+  paymentReference: string;
+  deliveryCharges: string;
+  source: ManualOrderSource;
+  specialNotes: string;
+  sendConfirmationEmail: boolean;
+  items: ManualOrderItem[];
+};
+
+const selectClassName =
+  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
+const textareaClassName =
+  'flex min-h-[104px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
+
+const createManualItem = (): ManualOrderItem => ({
+  id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  productId: '',
+  quantity: '1',
+  unitPrice: '',
+  size: '',
+  color: '',
+  style: '',
+  dimension: '',
+  dimensionDetails: '',
+  extrasTotal: '',
+  assemblyServiceSelected: false,
+  assemblyServicePrice: '',
+});
+
+const createInitialManualOrder = (): ManualOrderFormState => ({
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  alternativePhone: '',
+  address: '',
+  city: '',
+  postalCode: '',
+  floorNumber: '',
+  paymentMethod: 'bank_transfer',
+  paymentReference: '',
+  deliveryCharges: '0.00',
+  source: 'whatsapp',
+  specialNotes: '',
+  sendConfirmationEmail: false,
+  items: [createManualItem()],
+});
+
+const normalizeList = <T,>(data: T[] | { results?: T[] }): T[] => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data.results)) return data.results;
+  return [];
+};
+
+const parseNumber = (value?: string | number | null) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const parseQuantity = (value?: string) => {
+  const parsed = Number.parseInt(value || '1', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+};
+
+const formatMoney = (value?: string | number | null) => `GBP ${parseNumber(value).toFixed(2)}`;
 
 const getStatusLabel = (status: string) => {
   if (status === 'shipped') return 'delivered';
@@ -18,7 +113,7 @@ const isDisplayableOrderPart = (value?: string) => {
   const lower = cleaned.toLowerCase();
   if (lower.includes('dimension')) return false;
   if (/(^|\b)(length|width|height|headboard height|bed height)\s*:/.test(lower)) return false;
-  if (/(cm|inch|inches|\")/.test(lower) && /(length|width|height)/.test(lower)) return false;
+  if (/(cm|inch|inches|")/.test(lower) && /(length|width|height)/.test(lower)) return false;
   return true;
 };
 
@@ -47,8 +142,7 @@ const getCleanItemSummary = (item: Order['items'][number]) => {
 
   const addPart = (value?: string) => {
     const cleaned = (value || '').trim();
-    if (!cleaned) return;
-    if (!isDisplayableOrderPart(cleaned)) return;
+    if (!cleaned || !isDisplayableOrderPart(cleaned)) return;
     const key = cleaned.toLowerCase();
     if (seen.has(key)) return;
     seen.add(key);
@@ -65,28 +159,85 @@ const getCleanItemSummary = (item: Order['items'][number]) => {
 
   if (item.mattress_name) addPart(`Mattress: ${item.mattress_name}`);
   if (item.assembly_service_selected) {
-    addPart(`Assembly Service: £${Number(item.assembly_service_price || 0).toFixed(2)}`);
+    addPart(`Assembly Service: ${formatMoney(item.assembly_service_price || 0)}`);
   }
 
   return sortOrderParts(parts);
 };
 
+const isManualItemEmpty = (item: ManualOrderItem) =>
+  !item.productId &&
+  !item.size.trim() &&
+  !item.color.trim() &&
+  !item.style.trim() &&
+  !item.dimension.trim() &&
+  !item.dimensionDetails.trim() &&
+  !item.extrasTotal.trim() &&
+  !item.assemblyServicePrice.trim();
+
+const sourceLabel: Record<ManualOrderSource, string> = {
+  whatsapp: 'WhatsApp',
+  phone: 'Phone',
+  walk_in: 'Walk-in',
+  other: 'Other',
+};
+
+const buildManualNotes = (source: ManualOrderSource, notes: string) => {
+  const lines = [`Order source: ${sourceLabel[source]}`];
+  const trimmedNotes = notes.trim();
+  if (trimmedNotes) {
+    lines.push(trimmedNotes);
+  }
+  return lines.join('\n');
+};
+
 const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [isSubmittingManualOrder, setIsSubmittingManualOrder] = useState(false);
+  const [manualOrder, setManualOrder] = useState<ManualOrderFormState>(() => createInitialManualOrder());
+
+  const manualSubtotal = useMemo(
+    () =>
+      manualOrder.items.reduce((sum, item) => {
+        return sum + parseNumber(item.unitPrice) * parseQuantity(item.quantity);
+      }, 0),
+    [manualOrder.items]
+  );
+
+  const manualDeliveryCharges = useMemo(
+    () => parseNumber(manualOrder.deliveryCharges),
+    [manualOrder.deliveryCharges]
+  );
+
+  const manualTotal = useMemo(
+    () => manualSubtotal + manualDeliveryCharges,
+    [manualDeliveryCharges, manualSubtotal]
+  );
 
   const loadOrders = async () => {
     try {
-      const data = await apiGet<Order[]>('/orders/');
-      setOrders(data);
+      const data = await apiGet<Order[] | { results?: Order[] }>('/orders/');
+      setOrders(normalizeList(data));
     } catch {
       toast.error('Failed to load orders');
     }
   };
 
+  const loadProducts = async () => {
+    try {
+      const data = await apiGet<Product[] | { results?: Product[] }>('/products/?summary=1');
+      setProducts(normalizeList(data));
+    } catch {
+      toast.error('Failed to load products for manual orders');
+    }
+  };
+
   useEffect(() => {
-    loadOrders();
+    void loadOrders();
+    void loadProducts();
   }, []);
 
   const viewOrder = async (id: number) => {
@@ -102,11 +253,14 @@ const Orders = () => {
     }
   };
 
-  const updateStatus = async (id: number, action: 'mark_paid' | 'mark_delivered') => {
+  const updateStatus = async (id: number, action: OrderAction) => {
     try {
       await apiPost(`/orders/${id}/${action}/`, {});
       toast.success('Order updated');
       await loadOrders();
+      if (selectedOrder?.id === id) {
+        await viewOrder(id);
+      }
     } catch {
       toast.error('Update failed');
     }
@@ -129,12 +283,554 @@ const Orders = () => {
     }
   };
 
+  const setManualField = <K extends keyof ManualOrderFormState>(field: K, value: ManualOrderFormState[K]) => {
+    setManualOrder((current) => ({ ...current, [field]: value }));
+  };
+
+  const updateManualItem = (itemId: string, patch: Partial<ManualOrderItem>) => {
+    setManualOrder((current) => ({
+      ...current,
+      items: current.items.map((item) => (item.id === itemId ? { ...item, ...patch } : item)),
+    }));
+  };
+
+  const handleManualProductChange = (itemId: string, productId: string) => {
+    const selectedProduct = products.find((product) => String(product.id) === productId);
+    updateManualItem(itemId, {
+      productId,
+      unitPrice: selectedProduct ? parseNumber(selectedProduct.price).toFixed(2) : '',
+    });
+  };
+
+  const addManualItem = () => {
+    setManualOrder((current) => ({ ...current, items: [...current.items, createManualItem()] }));
+  };
+
+  const removeManualItem = (itemId: string) => {
+    setManualOrder((current) => {
+      const remainingItems = current.items.filter((item) => item.id !== itemId);
+      return {
+        ...current,
+        items: remainingItems.length > 0 ? remainingItems : [createManualItem()],
+      };
+    });
+  };
+
+  const submitManualOrder = async (downloadPdfAfterCreate: boolean) => {
+    if (!manualOrder.firstName.trim() || !manualOrder.lastName.trim()) {
+      toast.error('Enter the customer first and last name');
+      return;
+    }
+    if (!manualOrder.email.trim() || !manualOrder.phone.trim()) {
+      toast.error('Enter the customer email and phone number');
+      return;
+    }
+    if (!manualOrder.address.trim() || !manualOrder.city.trim() || !manualOrder.postalCode.trim()) {
+      toast.error('Enter the delivery address, city, and postal code');
+      return;
+    }
+    if (products.length === 0) {
+      toast.error('Products are still loading. Please try again in a moment.');
+      return;
+    }
+
+    const filledItems = manualOrder.items.filter((item) => !isManualItemEmpty(item));
+    if (filledItems.length === 0) {
+      toast.error('Add at least one order item');
+      return;
+    }
+
+    for (const item of filledItems) {
+      if (!item.productId) {
+        toast.error('Choose a product for each order item');
+        return;
+      }
+      if (parseNumber(item.unitPrice) <= 0) {
+        toast.error('Each order item needs a unit price greater than 0');
+        return;
+      }
+      if (parseQuantity(item.quantity) <= 0) {
+        toast.error('Each order item needs a valid quantity');
+        return;
+      }
+      if (item.assemblyServiceSelected && parseNumber(item.assemblyServicePrice) <= 0) {
+        toast.error('Assembly service items need a service price greater than 0');
+        return;
+      }
+    }
+
+    const payload = {
+      first_name: manualOrder.firstName.trim(),
+      last_name: manualOrder.lastName.trim(),
+      email: manualOrder.email.trim(),
+      phone: manualOrder.phone.trim(),
+      alternative_phone: manualOrder.alternativePhone.trim(),
+      address: manualOrder.address.trim(),
+      city: manualOrder.city.trim(),
+      postal_code: manualOrder.postalCode.trim(),
+      floor_number: manualOrder.floorNumber.trim(),
+      total_amount: manualTotal.toFixed(2),
+      delivery_charges: manualDeliveryCharges.toFixed(2),
+      payment_method: manualOrder.paymentMethod.trim(),
+      payment_id: manualOrder.paymentReference.trim(),
+      send_confirmation_email: manualOrder.sendConfirmationEmail,
+      special_notes: buildManualNotes(manualOrder.source, manualOrder.specialNotes),
+      items: filledItems.map((item) => ({
+        product_id: Number(item.productId),
+        quantity: parseQuantity(item.quantity),
+        price: parseNumber(item.unitPrice).toFixed(2),
+        size: item.size.trim(),
+        color: item.color.trim(),
+        style: item.style.trim(),
+        dimension: item.dimension.trim(),
+        dimension_details: item.dimensionDetails.trim(),
+        extras_total: parseNumber(item.extrasTotal).toFixed(2),
+        include_dimension: true,
+        assembly_service_selected: item.assemblyServiceSelected,
+        assembly_service_price: item.assemblyServiceSelected
+          ? parseNumber(item.assemblyServicePrice).toFixed(2)
+          : '0.00',
+      })),
+    };
+
+    setIsSubmittingManualOrder(true);
+    try {
+      const createdOrder = await apiPost<Order>('/orders/', payload);
+      setSelectedOrder(createdOrder);
+      setManualOrder(createInitialManualOrder());
+      await loadOrders();
+      toast.success('Manual order created');
+      if (downloadPdfAfterCreate) {
+        await downloadDeliveryPdf(createdOrder.id);
+      }
+    } catch {
+      toast.error('Failed to create manual order');
+    } finally {
+      setIsSubmittingManualOrder(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-3xl font-serif font-bold text-espresso">Orders</h2>
-        <p className="text-muted-foreground">Monitor and manage customer orders.</p>
+        <p className="text-muted-foreground">Monitor website orders and create manual records from WhatsApp or phone orders.</p>
       </div>
+
+      <Card>
+        <CardContent className="space-y-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 className="text-xl font-semibold text-espresso">Create Manual Order</h3>
+              <p className="text-sm text-muted-foreground">
+                Add orders received outside the website and keep them available for record tracking and PDF downloads.
+              </p>
+            </div>
+            <div className="rounded-md border border-dashed border-border bg-muted/20 px-4 py-3 text-right">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Running total</p>
+              <p className="mt-1 text-2xl font-semibold text-espresso">{formatMoney(manualTotal)}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso" htmlFor="manual-first-name">
+                First name
+              </label>
+              <Input
+                id="manual-first-name"
+                value={manualOrder.firstName}
+                onChange={(event) => setManualField('firstName', event.target.value)}
+                placeholder="Ayesha"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso" htmlFor="manual-last-name">
+                Last name
+              </label>
+              <Input
+                id="manual-last-name"
+                value={manualOrder.lastName}
+                onChange={(event) => setManualField('lastName', event.target.value)}
+                placeholder="Jahangir"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso" htmlFor="manual-email">
+                Email
+              </label>
+              <Input
+                id="manual-email"
+                type="email"
+                value={manualOrder.email}
+                onChange={(event) => setManualField('email', event.target.value)}
+                placeholder="customer@example.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso" htmlFor="manual-phone">
+                Phone
+              </label>
+              <Input
+                id="manual-phone"
+                value={manualOrder.phone}
+                onChange={(event) => setManualField('phone', event.target.value)}
+                placeholder="+44"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso" htmlFor="manual-alt-phone">
+                Alternative phone
+              </label>
+              <Input
+                id="manual-alt-phone"
+                value={manualOrder.alternativePhone}
+                onChange={(event) => setManualField('alternativePhone', event.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+            <div className="space-y-2 xl:col-span-3">
+              <label className="text-sm font-medium text-espresso" htmlFor="manual-address">
+                Address
+              </label>
+              <Input
+                id="manual-address"
+                value={manualOrder.address}
+                onChange={(event) => setManualField('address', event.target.value)}
+                placeholder="Street address"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso" htmlFor="manual-city">
+                City
+              </label>
+              <Input
+                id="manual-city"
+                value={manualOrder.city}
+                onChange={(event) => setManualField('city', event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso" htmlFor="manual-postal-code">
+                Postal code
+              </label>
+              <Input
+                id="manual-postal-code"
+                value={manualOrder.postalCode}
+                onChange={(event) => setManualField('postalCode', event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso" htmlFor="manual-floor-number">
+                Floor number
+              </label>
+              <Input
+                id="manual-floor-number"
+                value={manualOrder.floorNumber}
+                onChange={(event) => setManualField('floorNumber', event.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso" htmlFor="manual-source">
+                Order source
+              </label>
+              <select
+                id="manual-source"
+                className={selectClassName}
+                value={manualOrder.source}
+                onChange={(event) => setManualField('source', event.target.value as ManualOrderSource)}
+              >
+                <option value="whatsapp">WhatsApp</option>
+                <option value="phone">Phone</option>
+                <option value="walk_in">Walk-in</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso" htmlFor="manual-payment-method">
+                Payment method
+              </label>
+              <select
+                id="manual-payment-method"
+                className={selectClassName}
+                value={manualOrder.paymentMethod}
+                onChange={(event) => setManualField('paymentMethod', event.target.value)}
+              >
+                <option value="bank_transfer">Bank transfer</option>
+                <option value="cash">Cash</option>
+                <option value="card">Card</option>
+                <option value="paypal">PayPal</option>
+                <option value="cod">Cash on delivery</option>
+                <option value="manual">Manual</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso" htmlFor="manual-payment-reference">
+                Payment reference
+              </label>
+              <Input
+                id="manual-payment-reference"
+                value={manualOrder.paymentReference}
+                onChange={(event) => setManualField('paymentReference', event.target.value)}
+                placeholder="Optional"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-espresso" htmlFor="manual-delivery-charges">
+                Delivery charges
+              </label>
+              <Input
+                id="manual-delivery-charges"
+                type="number"
+                min="0"
+                step="0.01"
+                value={manualOrder.deliveryCharges}
+                onChange={(event) => setManualField('deliveryCharges', event.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-espresso" htmlFor="manual-special-notes">
+              Notes for this order
+            </label>
+            <textarea
+              id="manual-special-notes"
+              className={textareaClassName}
+              value={manualOrder.specialNotes}
+              onChange={(event: ChangeEvent<HTMLTextAreaElement>) => setManualField('specialNotes', event.target.value)}
+              placeholder="Delivery instructions, WhatsApp notes, or any extra record details."
+            />
+          </div>
+
+          <div className="rounded-md border bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 className="text-base font-semibold text-espresso">Items</h4>
+                <p className="text-sm text-muted-foreground">
+                  Choose existing products so the order record stays linked to the catalog and PDF output.
+                </p>
+              </div>
+              <Button type="button" variant="outline" onClick={addManualItem}>
+                <Plus className="mr-2 h-4 w-4" /> Add item
+              </Button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              {manualOrder.items.map((item, index) => (
+                <div key={item.id} className="rounded-md border border-border/70 bg-muted/10 p-4">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-espresso">Item {index + 1}</p>
+                      <p className="text-xs text-muted-foreground">Unit price should be the final charge per item.</p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeManualItem(item.id)}
+                      disabled={manualOrder.items.length === 1}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" /> Remove
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="space-y-2 xl:col-span-2">
+                      <label className="text-sm font-medium text-espresso" htmlFor={`manual-product-${item.id}`}>
+                        Product
+                      </label>
+                      <select
+                        id={`manual-product-${item.id}`}
+                        className={selectClassName}
+                        value={item.productId}
+                        onChange={(event) => handleManualProductChange(item.id, event.target.value)}
+                      >
+                        <option value="">Choose a product</option>
+                        {products.map((product) => (
+                          <option key={product.id} value={product.id}>
+                            {product.name} ({formatMoney(product.price)})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-espresso" htmlFor={`manual-quantity-${item.id}`}>
+                        Quantity
+                      </label>
+                      <Input
+                        id={`manual-quantity-${item.id}`}
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={item.quantity}
+                        onChange={(event) => updateManualItem(item.id, { quantity: event.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-espresso" htmlFor={`manual-price-${item.id}`}>
+                        Unit price
+                      </label>
+                      <Input
+                        id={`manual-price-${item.id}`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.unitPrice}
+                        onChange={(event) => updateManualItem(item.id, { unitPrice: event.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-espresso" htmlFor={`manual-size-${item.id}`}>
+                        Size
+                      </label>
+                      <Input
+                        id={`manual-size-${item.id}`}
+                        value={item.size}
+                        onChange={(event) => updateManualItem(item.id, { size: event.target.value })}
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-espresso" htmlFor={`manual-colour-${item.id}`}>
+                        Colour
+                      </label>
+                      <Input
+                        id={`manual-colour-${item.id}`}
+                        value={item.color}
+                        onChange={(event) => updateManualItem(item.id, { color: event.target.value })}
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <div className="space-y-2 xl:col-span-2">
+                      <label className="text-sm font-medium text-espresso" htmlFor={`manual-style-${item.id}`}>
+                        Specification / style
+                      </label>
+                      <Input
+                        id={`manual-style-${item.id}`}
+                        value={item.style}
+                        onChange={(event) => updateManualItem(item.id, { style: event.target.value })}
+                        placeholder="Fabric: Plush Velvet | Headboard: Wingback"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-espresso" htmlFor={`manual-extras-${item.id}`}>
+                        Extras note amount
+                      </label>
+                      <Input
+                        id={`manual-extras-${item.id}`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.extrasTotal}
+                        onChange={(event) => updateManualItem(item.id, { extrasTotal: event.target.value })}
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-espresso" htmlFor={`manual-dimension-${item.id}`}>
+                        Dimension label
+                      </label>
+                      <Input
+                        id={`manual-dimension-${item.id}`}
+                        value={item.dimension}
+                        onChange={(event) => updateManualItem(item.id, { dimension: event.target.value })}
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <div className="space-y-2 xl:col-span-2">
+                      <label className="text-sm font-medium text-espresso" htmlFor={`manual-dimension-details-${item.id}`}>
+                        Dimension details
+                      </label>
+                      <Input
+                        id={`manual-dimension-details-${item.id}`}
+                        value={item.dimensionDetails}
+                        onChange={(event) => updateManualItem(item.id, { dimensionDetails: event.target.value })}
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 pt-7 text-sm font-medium text-espresso">
+                        <input
+                          type="checkbox"
+                          checked={item.assemblyServiceSelected}
+                          onChange={(event) =>
+                            updateManualItem(item.id, {
+                              assemblyServiceSelected: event.target.checked,
+                              assemblyServicePrice: event.target.checked ? item.assemblyServicePrice : '',
+                            })
+                          }
+                        />
+                        Assembly service
+                      </label>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-espresso" htmlFor={`manual-assembly-price-${item.id}`}>
+                        Assembly price
+                      </label>
+                      <Input
+                        id={`manual-assembly-price-${item.id}`}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.assemblyServicePrice}
+                        disabled={!item.assemblyServiceSelected}
+                        onChange={(event) => updateManualItem(item.id, { assemblyServicePrice: event.target.value })}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-md border bg-muted/20 p-4">
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Subtotal: {formatMoney(manualSubtotal)}</p>
+              <p className="text-sm text-muted-foreground">Delivery: {formatMoney(manualDeliveryCharges)}</p>
+              <p className="text-lg font-semibold text-espresso">Total: {formatMoney(manualTotal)}</p>
+            </div>
+            <div className="space-y-3 text-right">
+              <label className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={manualOrder.sendConfirmationEmail}
+                  onChange={(event) => setManualField('sendConfirmationEmail', event.target.checked)}
+                />
+                Send confirmation emails after saving
+              </label>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setManualOrder(createInitialManualOrder())}
+                  disabled={isSubmittingManualOrder}
+                >
+                  Reset form
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void submitManualOrder(false)}
+                  disabled={isSubmittingManualOrder}
+                >
+                  {isSubmittingManualOrder ? 'Saving...' : 'Create record'}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void submitManualOrder(true)}
+                  disabled={isSubmittingManualOrder}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  {isSubmittingManualOrder ? 'Saving...' : 'Create and download PDF'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {selectedOrder && (
         <Card>
@@ -143,7 +839,7 @@ const Orders = () => {
               <div>
                 <h3 className="text-xl font-semibold text-espresso">Order ORD-{selectedOrder.id}</h3>
                 <p className="text-sm text-muted-foreground">
-                  {selectedOrder.first_name} {selectedOrder.last_name} • {selectedOrder.email}
+                  {selectedOrder.first_name} {selectedOrder.last_name} / {selectedOrder.email}
                 </p>
               </div>
               <Button variant="outline" onClick={() => setSelectedOrder(null)}>
@@ -152,14 +848,14 @@ const Orders = () => {
             </div>
 
             <div className="flex justify-end">
-              <Button variant="outline" onClick={() => downloadDeliveryPdf(selectedOrder.id)}>
+              <Button variant="outline" onClick={() => void downloadDeliveryPdf(selectedOrder.id)}>
                 <Download className="mr-2 h-4 w-4" /> Download PDF
               </Button>
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="rounded-md border bg-white p-4">
-                <p className="text-sm font-medium text-espresso">Shipping Address</p>
+                <p className="text-sm font-medium text-espresso">Shipping address</p>
                 <p className="mt-2 text-sm text-muted-foreground">{selectedOrder.address}</p>
                 <p className="text-sm text-muted-foreground">
                   {selectedOrder.city} {selectedOrder.postal_code}
@@ -173,15 +869,14 @@ const Orders = () => {
                 )}
               </div>
               <div className="rounded-md border bg-white p-4">
-                <p className="text-sm font-medium text-espresso">Order Summary</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Payment: {selectedOrder.payment_method}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Status: {getStatusLabel(selectedOrder.status)}
-                </p>
+                <p className="text-sm font-medium text-espresso">Order summary</p>
+                <p className="mt-2 text-sm text-muted-foreground">Payment: {selectedOrder.payment_method}</p>
+                {selectedOrder.payment_id && (
+                  <p className="text-sm text-muted-foreground">Reference: {selectedOrder.payment_id}</p>
+                )}
+                <p className="text-sm text-muted-foreground">Status: {getStatusLabel(selectedOrder.status)}</p>
                 <p className="mt-2 text-sm font-semibold text-espresso">
-                  Total: £{Number(selectedOrder.total_amount).toFixed(2)}
+                  Total: {formatMoney(selectedOrder.total_amount)}
                 </p>
               </div>
             </div>
@@ -190,7 +885,7 @@ const Orders = () => {
               <div className="grid gap-4 md:grid-cols-2">
                 {selectedOrder.special_notes && (
                   <div className="rounded-md border bg-white p-4">
-                    <p className="text-sm font-medium text-espresso">Customer Notes</p>
+                    <p className="text-sm font-medium text-espresso">Order notes</p>
                     <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
                       {selectedOrder.special_notes}
                     </p>
@@ -198,19 +893,19 @@ const Orders = () => {
                 )}
                 {(selectedOrder.reference_images || []).length > 0 && (
                   <div className="rounded-md border bg-white p-4">
-                    <p className="text-sm font-medium text-espresso">Reference Images</p>
+                    <p className="text-sm font-medium text-espresso">Reference images</p>
                     <div className="mt-3 flex flex-wrap gap-3">
-                      {selectedOrder.reference_images!.map((rawUrl, idx) => {
+                      {(selectedOrder.reference_images || []).map((rawUrl, index) => {
                         const url = rawUrl || '';
                         const openImage = () => {
                           try {
                             const base64 = url.replace(/^data:[^;]+;base64,/, '');
                             const mimeMatch = url.match(/^data:([^;]+);/);
                             const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
-                            const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+                            const bytes = Uint8Array.from(atob(base64), (value) => value.charCodeAt(0));
                             const blobUrl = URL.createObjectURL(new Blob([bytes], { type: mime }));
-                            const win = window.open(blobUrl, '_blank', 'noopener,noreferrer');
-                            if (win) win.opener = null;
+                            const openedWindow = window.open(blobUrl, '_blank', 'noopener,noreferrer');
+                            if (openedWindow) openedWindow.opener = null;
                             setTimeout(() => URL.revokeObjectURL(blobUrl), 30000);
                           } catch {
                             window.open(url, '_blank', 'noopener,noreferrer');
@@ -219,14 +914,14 @@ const Orders = () => {
 
                         return (
                           <div
-                            key={idx}
+                            key={`${url}-${index}`}
                             className="group relative block h-24 w-24 cursor-pointer overflow-hidden rounded-md border border-muted/60 bg-muted"
                             title="Open image in new tab"
                             onClick={openImage}
                           >
                             <img
                               src={url}
-                              alt={`Reference ${idx + 1}`}
+                              alt={`Reference ${index + 1}`}
                               className="h-full w-full object-cover transition group-hover:scale-105"
                               loading="lazy"
                             />
@@ -243,7 +938,7 @@ const Orders = () => {
               <p className="text-sm font-medium text-espresso">Items</p>
               <div className="mt-2 space-y-2">
                 {(selectedOrder.items || []).map((item) => {
-                  const extras = Number(item.extras_total || 0);
+                  const extras = parseNumber(item.extras_total || 0);
                   const summaryParts = getCleanItemSummary(item);
 
                   return (
@@ -253,14 +948,12 @@ const Orders = () => {
                           <p className="font-medium text-espresso">{item.product_name || `Product #${item.product}`}</p>
                           <p className="text-xs text-muted-foreground">
                             Qty {item.quantity}
-                            {summaryParts.length > 0 ? ` • ${summaryParts.join(' • ')}` : ''}
+                            {summaryParts.length > 0 ? ` / ${summaryParts.join(' / ')}` : ''}
                           </p>
-                          {extras > 0 && (
-                            <p className="text-xs text-amber-700">Extras: £{extras.toFixed(2)}</p>
-                          )}
+                          {extras > 0 && <p className="text-xs text-amber-700">Extras: {formatMoney(extras)}</p>}
                         </div>
                         <div className="whitespace-nowrap font-semibold text-espresso">
-                          £{Number(item.price).toFixed(2)}
+                          {formatMoney(item.price)}
                         </div>
                       </div>
                     </div>
@@ -282,7 +975,7 @@ const Orders = () => {
               <TableRow>
                 <TableHead>Order ID</TableHead>
                 <TableHead>Customer</TableHead>
-                <TableHead>Contact Info</TableHead>
+                <TableHead>Contact info</TableHead>
                 <TableHead>Total</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -296,13 +989,13 @@ const Orders = () => {
                     <div className="font-medium">
                       {order.first_name} {order.last_name}
                     </div>
-                    <div className="max-w-[200px] truncate text-xs text-muted-foreground">{order.address}</div>
+                    <div className="max-w-[220px] truncate text-xs text-muted-foreground">{order.address}</div>
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">{order.email}</div>
                     <div className="text-xs text-muted-foreground">{order.phone}</div>
                   </TableCell>
-                  <TableCell>£{Number(order.total_amount).toFixed(2)}</TableCell>
+                  <TableCell>{formatMoney(order.total_amount)}</TableCell>
                   <TableCell>
                     <span className="rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-800">
                       {getStatusLabel(order.status)}
@@ -312,23 +1005,34 @@ const Orders = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => viewOrder(order.id)}
-                      disabled={isLoadingDetail && selectedOrder?.id === order.id}
+                      onClick={() => void viewOrder(order.id)}
+                      disabled={isLoadingDetail}
                     >
                       <Eye className="mr-2 h-4 w-4" /> View
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => updateStatus(order.id, 'mark_paid')}>
+                    <Button variant="outline" size="sm" onClick={() => void updateStatus(order.id, 'mark_paid')}>
                       <CheckCircle className="mr-2 h-4 w-4" /> Paid
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => updateStatus(order.id, 'mark_delivered')}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void updateStatus(order.id, 'mark_delivered')}
+                    >
                       <CheckCircle className="mr-2 h-4 w-4" /> Delivered
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => downloadDeliveryPdf(order.id)}>
+                    <Button variant="outline" size="sm" onClick={() => void downloadDeliveryPdf(order.id)}>
                       <Download className="mr-2 h-4 w-4" /> PDF
                     </Button>
                   </TableCell>
                 </TableRow>
               ))}
+              {orders.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-6 text-center text-sm text-muted-foreground">
+                    No orders yet.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
