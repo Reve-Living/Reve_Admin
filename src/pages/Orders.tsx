@@ -14,6 +14,9 @@ type ManualOrderSource = 'whatsapp' | 'phone' | 'walk_in' | 'other';
 type ManualOrderItem = {
   id: string;
   productId: string;
+  productSearch: string;
+  categoryFilter: string;
+  subcategoryFilter: string;
   quantity: string;
   unitPrice: string;
   size: string;
@@ -53,6 +56,9 @@ const textareaClassName =
 const createManualItem = (): ManualOrderItem => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   productId: '',
+  productSearch: '',
+  categoryFilter: '',
+  subcategoryFilter: '',
   quantity: '1',
   unitPrice: '',
   size: '',
@@ -75,7 +81,7 @@ const createInitialManualOrder = (): ManualOrderFormState => ({
   city: '',
   postalCode: '',
   floorNumber: '',
-  paymentMethod: 'bank_transfer',
+  paymentMethod: 'paid',
   paymentReference: '',
   deliveryCharges: '0.00',
   source: 'whatsapp',
@@ -101,6 +107,50 @@ const parseQuantity = (value?: string) => {
 };
 
 const formatMoney = (value?: string | number | null) => `GBP ${parseNumber(value).toFixed(2)}`;
+
+const normalizeSearchText = (value?: string | null) =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const matchesSearchText = (value: string, query: string) => {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return true;
+
+  const haystack = normalizeSearchText(value);
+  return normalizedQuery.split(' ').every((term) => haystack.includes(term));
+};
+
+const getProductCategoryLabel = (product: Product) => (product.category_name || 'Uncategorised').trim() || 'Uncategorised';
+
+const getProductSubcategoryLabel = (product: Product) => (product.subcategory_name || '').trim();
+
+const getProductLocationLabel = (product: Product) => {
+  const categoryLabel = getProductCategoryLabel(product);
+  const subcategoryLabel = getProductSubcategoryLabel(product);
+  return subcategoryLabel ? `${categoryLabel} > ${subcategoryLabel}` : categoryLabel;
+};
+
+const getProductOptionLabel = (product: Product) =>
+  `${product.name} - ${getProductLocationLabel(product)} (${formatMoney(product.price)})`;
+
+const getProductSearchValue = (product: Product) =>
+  [product.name, product.slug, getProductCategoryLabel(product), getProductSubcategoryLabel(product)].join(' ');
+
+const getPaymentMethodLabel = (value?: string) =>
+  (
+    {
+      paid: 'Paid',
+      cash_on_delivery: 'Cash on delivery',
+      cod: 'Cash on delivery',
+      bank_transfer: 'Bank transfer',
+      cash: 'Cash',
+      card: 'Card',
+      manual: 'Manual',
+      paypal: 'PayPal',
+    } as Record<string, string>
+  )[(value || '').toLowerCase()] || value || 'Not provided';
 
 const getStatusLabel = (status: string) => {
   if (status === 'shipped') return 'delivered';
@@ -212,6 +262,99 @@ const Orders = () => {
     [manualOrder.deliveryCharges]
   );
 
+  const productLookup = useMemo(
+    () => new Map(products.map((product) => [String(product.id), product])),
+    [products]
+  );
+
+  const catalogProducts = useMemo(
+    () =>
+      [...products].sort((left, right) => {
+        const nameCompare = left.name.localeCompare(right.name, undefined, {
+          sensitivity: 'base',
+          numeric: true,
+        });
+        if (nameCompare !== 0) return nameCompare;
+
+        const categoryCompare = getProductCategoryLabel(left).localeCompare(getProductCategoryLabel(right), undefined, {
+          sensitivity: 'base',
+          numeric: true,
+        });
+        if (categoryCompare !== 0) return categoryCompare;
+
+        return getProductSubcategoryLabel(left).localeCompare(getProductSubcategoryLabel(right), undefined, {
+          sensitivity: 'base',
+          numeric: true,
+        });
+      }),
+    [products]
+  );
+
+  const categoryOptions = useMemo(() => {
+    const categories = new Map<
+      string,
+      {
+        label: string;
+        subcategories: Map<string, string>;
+      }
+    >();
+
+    for (const product of catalogProducts) {
+      const categoryValue = String(product.category ?? '');
+      const subcategoryValue = String(product.subcategory ?? '');
+      const categoryLabel = getProductCategoryLabel(product);
+      const subcategoryLabel = getProductSubcategoryLabel(product);
+
+      if (!categories.has(categoryValue)) {
+        categories.set(categoryValue, {
+          label: categoryLabel,
+          subcategories: new Map<string, string>(),
+        });
+      }
+
+      if (subcategoryValue && subcategoryLabel) {
+        categories.get(categoryValue)?.subcategories.set(subcategoryValue, subcategoryLabel);
+      }
+    }
+
+    return [...categories.entries()]
+      .map(([value, details]) => ({
+        value,
+        label: details.label,
+        subcategories: [...details.subcategories.entries()]
+          .map(([subcategoryValue, subcategoryLabel]) => ({
+            value: subcategoryValue,
+            label: subcategoryLabel,
+          }))
+          .sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base', numeric: true })),
+      }))
+      .sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base', numeric: true }));
+  }, [catalogProducts]);
+
+  const allSubcategoryOptions = useMemo(() => {
+    const subcategories = new Map<string, string>();
+    for (const option of categoryOptions) {
+      for (const subcategory of option.subcategories) {
+        subcategories.set(subcategory.value, subcategory.label);
+      }
+    }
+
+    return [...subcategories.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base', numeric: true }));
+  }, [categoryOptions]);
+
+  const subcategoryOptionsByCategory = useMemo(
+    () =>
+      new Map(
+        categoryOptions.map((option) => [
+          option.value,
+          option.subcategories,
+        ])
+      ),
+    [categoryOptions]
+  );
+
   const manualTotal = useMemo(
     () => manualSubtotal + manualDeliveryCharges,
     [manualDeliveryCharges, manualSubtotal]
@@ -295,7 +438,7 @@ const Orders = () => {
   };
 
   const handleManualProductChange = (itemId: string, productId: string) => {
-    const selectedProduct = products.find((product) => String(product.id) === productId);
+    const selectedProduct = productLookup.get(productId);
     updateManualItem(itemId, {
       productId,
       unitPrice: selectedProduct ? parseNumber(selectedProduct.price).toFixed(2) : '',
@@ -317,18 +460,6 @@ const Orders = () => {
   };
 
   const submitManualOrder = async (downloadPdfAfterCreate: boolean) => {
-    if (!manualOrder.firstName.trim() || !manualOrder.lastName.trim()) {
-      toast.error('Enter the customer first and last name');
-      return;
-    }
-    if (!manualOrder.email.trim() || !manualOrder.phone.trim()) {
-      toast.error('Enter the customer email and phone number');
-      return;
-    }
-    if (!manualOrder.address.trim() || !manualOrder.city.trim() || !manualOrder.postalCode.trim()) {
-      toast.error('Enter the delivery address, city, and postal code');
-      return;
-    }
     if (products.length === 0) {
       toast.error('Products are still loading. Please try again in a moment.');
       return;
@@ -441,7 +572,7 @@ const Orders = () => {
                 id="manual-first-name"
                 value={manualOrder.firstName}
                 onChange={(event) => setManualField('firstName', event.target.value)}
-                placeholder="Ayesha"
+                placeholder="Optional"
               />
             </div>
             <div className="space-y-2">
@@ -452,7 +583,7 @@ const Orders = () => {
                 id="manual-last-name"
                 value={manualOrder.lastName}
                 onChange={(event) => setManualField('lastName', event.target.value)}
-                placeholder="Jahangir"
+                placeholder="Optional"
               />
             </div>
             <div className="space-y-2">
@@ -464,7 +595,7 @@ const Orders = () => {
                 type="email"
                 value={manualOrder.email}
                 onChange={(event) => setManualField('email', event.target.value)}
-                placeholder="customer@example.com"
+                placeholder="Optional"
               />
             </div>
             <div className="space-y-2">
@@ -475,7 +606,7 @@ const Orders = () => {
                 id="manual-phone"
                 value={manualOrder.phone}
                 onChange={(event) => setManualField('phone', event.target.value)}
-                placeholder="+44"
+                placeholder="Optional"
               />
             </div>
             <div className="space-y-2">
@@ -497,7 +628,7 @@ const Orders = () => {
                 id="manual-address"
                 value={manualOrder.address}
                 onChange={(event) => setManualField('address', event.target.value)}
-                placeholder="Street address"
+                placeholder="Optional"
               />
             </div>
             <div className="space-y-2">
@@ -508,6 +639,7 @@ const Orders = () => {
                 id="manual-city"
                 value={manualOrder.city}
                 onChange={(event) => setManualField('city', event.target.value)}
+                placeholder="Optional"
               />
             </div>
             <div className="space-y-2">
@@ -518,6 +650,7 @@ const Orders = () => {
                 id="manual-postal-code"
                 value={manualOrder.postalCode}
                 onChange={(event) => setManualField('postalCode', event.target.value)}
+                placeholder="Optional"
               />
             </div>
             <div className="space-y-2">
@@ -557,12 +690,8 @@ const Orders = () => {
                 value={manualOrder.paymentMethod}
                 onChange={(event) => setManualField('paymentMethod', event.target.value)}
               >
-                <option value="bank_transfer">Bank transfer</option>
-                <option value="cash">Cash</option>
-                <option value="card">Card</option>
-                <option value="paypal">PayPal</option>
-                <option value="cod">Cash on delivery</option>
-                <option value="manual">Manual</option>
+                <option value="paid">Paid</option>
+                <option value="cash_on_delivery">Cash on delivery</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -573,7 +702,7 @@ const Orders = () => {
                 id="manual-payment-reference"
                 value={manualOrder.paymentReference}
                 onChange={(event) => setManualField('paymentReference', event.target.value)}
-                placeholder="Optional"
+                placeholder="Website paid, PayPal, bank transfer"
               />
             </div>
             <div className="space-y-2">
@@ -637,24 +766,113 @@ const Orders = () => {
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <div className="space-y-2 xl:col-span-2">
-                      <label className="text-sm font-medium text-espresso" htmlFor={`manual-product-${item.id}`}>
-                        Product
-                      </label>
-                      <select
-                        id={`manual-product-${item.id}`}
-                        className={selectClassName}
-                        value={item.productId}
-                        onChange={(event) => handleManualProductChange(item.id, event.target.value)}
-                      >
-                        <option value="">Choose a product</option>
-                        {products.map((product) => (
-                          <option key={product.id} value={product.id}>
-                            {product.name} ({formatMoney(product.price)})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    {(() => {
+                      const selectedProduct = productLookup.get(item.productId);
+                      const availableSubcategories = item.categoryFilter
+                        ? subcategoryOptionsByCategory.get(item.categoryFilter) || []
+                        : allSubcategoryOptions;
+                      const filteredProducts = catalogProducts.filter((product) => {
+                        if (item.categoryFilter && String(product.category ?? '') !== item.categoryFilter) {
+                          return false;
+                        }
+                        if (item.subcategoryFilter && String(product.subcategory ?? '') !== item.subcategoryFilter) {
+                          return false;
+                        }
+                        return matchesSearchText(getProductSearchValue(product), item.productSearch);
+                      });
+                      const selectableProducts =
+                        selectedProduct && !filteredProducts.some((product) => product.id === selectedProduct.id)
+                          ? [selectedProduct, ...filteredProducts]
+                          : filteredProducts;
+
+                      return (
+                        <>
+                          <div className="space-y-2 xl:col-span-2">
+                            <label className="text-sm font-medium text-espresso" htmlFor={`manual-product-search-${item.id}`}>
+                              Search product
+                            </label>
+                            <Input
+                              id={`manual-product-search-${item.id}`}
+                              value={item.productSearch}
+                              onChange={(event) => updateManualItem(item.id, { productSearch: event.target.value })}
+                              placeholder="Type initial letters to filter products"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Sorted A-Z. You can search by product, category, or subcategory.
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-espresso" htmlFor={`manual-category-filter-${item.id}`}>
+                              Category
+                            </label>
+                            <select
+                              id={`manual-category-filter-${item.id}`}
+                              className={selectClassName}
+                              value={item.categoryFilter}
+                              onChange={(event) =>
+                                updateManualItem(item.id, {
+                                  categoryFilter: event.target.value,
+                                  subcategoryFilter: '',
+                                })
+                              }
+                            >
+                              <option value="">All categories</option>
+                              {categoryOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium text-espresso" htmlFor={`manual-subcategory-filter-${item.id}`}>
+                              Subcategory
+                            </label>
+                            <select
+                              id={`manual-subcategory-filter-${item.id}`}
+                              className={selectClassName}
+                              value={item.subcategoryFilter}
+                              onChange={(event) => updateManualItem(item.id, { subcategoryFilter: event.target.value })}
+                            >
+                              <option value="">All subcategories</option>
+                              {availableSubcategories.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-2 xl:col-span-4">
+                            <label className="text-sm font-medium text-espresso" htmlFor={`manual-product-${item.id}`}>
+                              Product
+                            </label>
+                            <select
+                              id={`manual-product-${item.id}`}
+                              className={selectClassName}
+                              value={item.productId}
+                              onChange={(event) => handleManualProductChange(item.id, event.target.value)}
+                            >
+                              <option value="">
+                                {selectableProducts.length > 0 ? 'Choose a product' : 'No matching products found'}
+                              </option>
+                              {selectableProducts.map((product) => (
+                                <option key={product.id} value={product.id}>
+                                  {getProductOptionLabel(product)}
+                                </option>
+                              ))}
+                            </select>
+                            <p className="text-xs text-muted-foreground">
+                              Showing {filteredProducts.length} of {catalogProducts.length} products.
+                            </p>
+                            {selectedProduct && (
+                              <p className="text-xs text-muted-foreground">
+                                Selected: {getProductLocationLabel(selectedProduct)}
+                              </p>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-espresso" htmlFor={`manual-quantity-${item.id}`}>
                         Quantity
@@ -799,7 +1017,7 @@ const Orders = () => {
                   checked={manualOrder.sendConfirmationEmail}
                   onChange={(event) => setManualField('sendConfirmationEmail', event.target.checked)}
                 />
-                Send confirmation emails after saving
+                Send email notifications after saving
               </label>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
@@ -839,7 +1057,9 @@ const Orders = () => {
               <div>
                 <h3 className="text-xl font-semibold text-espresso">Order ORD-{selectedOrder.id}</h3>
                 <p className="text-sm text-muted-foreground">
-                  {selectedOrder.first_name} {selectedOrder.last_name} / {selectedOrder.email}
+                  {[`${selectedOrder.first_name} ${selectedOrder.last_name}`.trim(), selectedOrder.email || selectedOrder.phone]
+                    .filter(Boolean)
+                    .join(' / ') || 'Manual order'}
                 </p>
               </div>
               <Button variant="outline" onClick={() => setSelectedOrder(null)}>
@@ -870,7 +1090,9 @@ const Orders = () => {
               </div>
               <div className="rounded-md border bg-white p-4">
                 <p className="text-sm font-medium text-espresso">Order summary</p>
-                <p className="mt-2 text-sm text-muted-foreground">Payment: {selectedOrder.payment_method}</p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Payment: {getPaymentMethodLabel(selectedOrder.payment_method)}
+                </p>
                 {selectedOrder.payment_id && (
                   <p className="text-sm text-muted-foreground">Reference: {selectedOrder.payment_id}</p>
                 )}
