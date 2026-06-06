@@ -122,6 +122,20 @@ const matchesSearchText = (value: string, query: string) => {
   return normalizedQuery.split(' ').every((term) => haystack.includes(term));
 };
 
+const getSearchRank = (product: Product, query: string) => {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return 0;
+
+  const normalizedName = normalizeSearchText(product.name);
+  const normalizedFullLabel = normalizeSearchText(getProductSearchValue(product));
+
+  if (normalizedName === normalizedQuery) return 1;
+  if (normalizedName.startsWith(normalizedQuery)) return 2;
+  if (normalizedName.split(' ').some((word) => word.startsWith(normalizedQuery))) return 3;
+  if (normalizedFullLabel.includes(normalizedQuery)) return 4;
+  return 99;
+};
+
 const getProductCategoryLabel = (product: Product) => (product.category_name || 'Uncategorised').trim() || 'Uncategorised';
 
 const getProductSubcategoryLabel = (product: Product) => (product.subcategory_name || '').trim();
@@ -247,6 +261,7 @@ const Orders = () => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isSubmittingManualOrder, setIsSubmittingManualOrder] = useState(false);
+  const [activeProductPickerId, setActiveProductPickerId] = useState<string | null>(null);
   const [manualOrder, setManualOrder] = useState<ManualOrderFormState>(() => createInitialManualOrder());
 
   const manualSubtotal = useMemo(
@@ -437,12 +452,33 @@ const Orders = () => {
     }));
   };
 
-  const handleManualProductChange = (itemId: string, productId: string) => {
-    const selectedProduct = productLookup.get(productId);
+  const handleManualProductSearchChange = (itemId: string, value: string) => {
+    setManualOrder((current) => ({
+      ...current,
+      items: current.items.map((item) => {
+        if (item.id !== itemId) return item;
+
+        const selectedProduct = productLookup.get(item.productId);
+        const keepSelectedProduct =
+          selectedProduct && normalizeSearchText(selectedProduct.name) === normalizeSearchText(value);
+
+        return {
+          ...item,
+          productSearch: value,
+          productId: keepSelectedProduct ? item.productId : '',
+          unitPrice: keepSelectedProduct ? item.unitPrice : '',
+        };
+      }),
+    }));
+  };
+
+  const selectManualProduct = (itemId: string, product: Product) => {
     updateManualItem(itemId, {
-      productId,
-      unitPrice: selectedProduct ? parseNumber(selectedProduct.price).toFixed(2) : '',
+      productId: String(product.id),
+      productSearch: product.name,
+      unitPrice: parseNumber(product.price).toFixed(2),
     });
+    setActiveProductPickerId(null);
   };
 
   const addManualItem = () => {
@@ -771,34 +807,62 @@ const Orders = () => {
                       const availableSubcategories = item.categoryFilter
                         ? subcategoryOptionsByCategory.get(item.categoryFilter) || []
                         : allSubcategoryOptions;
-                      const filteredProducts = catalogProducts.filter((product) => {
-                        if (item.categoryFilter && String(product.category ?? '') !== item.categoryFilter) {
-                          return false;
-                        }
-                        if (item.subcategoryFilter && String(product.subcategory ?? '') !== item.subcategoryFilter) {
-                          return false;
-                        }
-                        return matchesSearchText(getProductSearchValue(product), item.productSearch);
-                      });
-                      const selectableProducts =
-                        selectedProduct && !filteredProducts.some((product) => product.id === selectedProduct.id)
-                          ? [selectedProduct, ...filteredProducts]
-                          : filteredProducts;
+                      const filteredProducts = catalogProducts
+                        .filter((product) => {
+                          if (item.categoryFilter && String(product.category ?? '') !== item.categoryFilter) {
+                            return false;
+                          }
+                          if (item.subcategoryFilter && String(product.subcategory ?? '') !== item.subcategoryFilter) {
+                            return false;
+                          }
+                          return matchesSearchText(getProductSearchValue(product), item.productSearch);
+                        })
+                        .sort((left, right) => {
+                          const rankDiff = getSearchRank(left, item.productSearch) - getSearchRank(right, item.productSearch);
+                          if (rankDiff !== 0) return rankDiff;
+                          return left.name.localeCompare(right.name, undefined, { sensitivity: 'base', numeric: true });
+                        });
+                      const visibleSuggestions = filteredProducts.slice(0, 12);
+                      const shouldShowSuggestions =
+                        activeProductPickerId === item.id &&
+                        (visibleSuggestions.length > 0 || Boolean(normalizeSearchText(item.productSearch)));
 
                       return (
                         <>
                           <div className="space-y-2 xl:col-span-2">
                             <label className="text-sm font-medium text-espresso" htmlFor={`manual-product-search-${item.id}`}>
-                              Search product
+                              Product
                             </label>
-                            <Input
-                              id={`manual-product-search-${item.id}`}
-                              value={item.productSearch}
-                              onChange={(event) => updateManualItem(item.id, { productSearch: event.target.value })}
-                              placeholder="Type initial letters to filter products"
-                            />
+                            <div className="relative">
+                              <Input
+                                id={`manual-product-search-${item.id}`}
+                                value={item.productSearch}
+                                onFocus={() => setActiveProductPickerId(item.id)}
+                                onBlur={() => setActiveProductPickerId((current) => (current === item.id ? null : current))}
+                                onChange={(event) => handleManualProductSearchChange(item.id, event.target.value)}
+                                placeholder="Type initial letters like al to find products"
+                              />
+                              {shouldShowSuggestions && (
+                                <div className="absolute z-20 mt-2 max-h-72 w-full overflow-auto rounded-md border border-border bg-white shadow-lg">
+                                  {visibleSuggestions.map((product) => (
+                                    <button
+                                      key={product.id}
+                                      type="button"
+                                      className="block w-full border-b border-border/60 px-3 py-2 text-left text-sm text-espresso last:border-b-0 hover:bg-muted/40"
+                                      onMouseDown={(event) => event.preventDefault()}
+                                      onClick={() => selectManualProduct(item.id, product)}
+                                    >
+                                      {getProductOptionLabel(product)}
+                                    </button>
+                                  ))}
+                                  {visibleSuggestions.length === 0 && (
+                                    <div className="px-3 py-2 text-sm text-muted-foreground">No matching products found.</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground">
-                              Sorted A-Z. You can search by product, category, or subcategory.
+                              Type initials to see matches here. Products stay sorted A-Z.
                             </p>
                           </div>
                           <div className="space-y-2">
@@ -843,31 +907,15 @@ const Orders = () => {
                             </select>
                           </div>
                           <div className="space-y-2 xl:col-span-4">
-                            <label className="text-sm font-medium text-espresso" htmlFor={`manual-product-${item.id}`}>
-                              Product
-                            </label>
-                            <select
-                              id={`manual-product-${item.id}`}
-                              className={selectClassName}
-                              value={item.productId}
-                              onChange={(event) => handleManualProductChange(item.id, event.target.value)}
-                            >
-                              <option value="">
-                                {selectableProducts.length > 0 ? 'Choose a product' : 'No matching products found'}
-                              </option>
-                              {selectableProducts.map((product) => (
-                                <option key={product.id} value={product.id}>
-                                  {getProductOptionLabel(product)}
-                                </option>
-                              ))}
-                            </select>
                             <p className="text-xs text-muted-foreground">
                               Showing {filteredProducts.length} of {catalogProducts.length} products.
                             </p>
-                            {selectedProduct && (
+                            {selectedProduct ? (
                               <p className="text-xs text-muted-foreground">
-                                Selected: {getProductLocationLabel(selectedProduct)}
+                                Selected: {getProductOptionLabel(selectedProduct)}
                               </p>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">Choose one product from the suggestions above.</p>
                             )}
                           </div>
                         </>
