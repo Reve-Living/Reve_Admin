@@ -3,8 +3,8 @@ import { Card, CardContent } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { CheckCircle, Download, Eye, Plus, Trash2 } from 'lucide-react';
-import { apiDownload, apiGet, apiPost } from '../lib/api';
+import { CheckCircle, Download, Edit, Eye, Plus, Trash2 } from 'lucide-react';
+import { apiDelete, apiDownload, apiGet, apiPost, apiPut } from '../lib/api';
 import type { Order, Product } from '../lib/types';
 import { toast } from 'sonner';
 
@@ -246,6 +246,11 @@ const sourceLabel: Record<ManualOrderSource, string> = {
   other: 'Other',
 };
 
+const standardPaymentMethodOptions = [
+  { value: 'paid', label: 'Paid' },
+  { value: 'cash_on_delivery', label: 'Cash on delivery' },
+];
+
 const buildManualNotes = (source: ManualOrderSource, notes: string) => {
   const lines = [`Order source: ${sourceLabel[source]}`];
   const trimmedNotes = notes.trim();
@@ -255,6 +260,74 @@ const buildManualNotes = (source: ManualOrderSource, notes: string) => {
   return lines.join('\n');
 };
 
+const parseManualNotes = (rawNotes?: string) => {
+  const lines = String(rawNotes || '').split('\n');
+  const firstLine = (lines[0] || '').trim();
+  const matchedSource = Object.entries(sourceLabel).find(([, label]) => firstLine.toLowerCase() === `order source: ${label.toLowerCase()}`);
+
+  return {
+    source: (matchedSource?.[0] as ManualOrderSource | undefined) || 'whatsapp',
+    notes: matchedSource ? lines.slice(1).join('\n').trim() : String(rawNotes || '').trim(),
+  };
+};
+
+const normalizePaymentMethodForForm = (value?: string) => {
+  const normalized = (value || '').trim().toLowerCase();
+  if (normalized === 'cod') return 'cash_on_delivery';
+  if (standardPaymentMethodOptions.some((option) => option.value === normalized)) return normalized;
+  return normalized || 'paid';
+};
+
+const createManualItemFromOrderItem = (
+  item: Order['items'][number],
+  productLookup: Map<string, Product>
+): ManualOrderItem => {
+  const linkedProduct = item.product ? productLookup.get(String(item.product)) : undefined;
+  const productId = item.product ? String(item.product) : '';
+
+  return {
+    id: `existing-item-${item.id}`,
+    productId,
+    productSearch: linkedProduct?.name || item.product_name || '',
+    categoryFilter: linkedProduct?.category ? String(linkedProduct.category) : '',
+    subcategoryFilter: linkedProduct?.subcategory ? String(linkedProduct.subcategory) : '',
+    quantity: String(item.quantity || 1),
+    unitPrice: parseNumber(item.price).toFixed(2),
+    size: item.size || '',
+    color: item.color || '',
+    style: item.style || '',
+    dimension: item.dimension || '',
+    dimensionDetails: item.dimension_details || '',
+    extrasTotal: parseNumber(item.extras_total) > 0 ? parseNumber(item.extras_total).toFixed(2) : '',
+    assemblyServiceSelected: Boolean(item.assembly_service_selected),
+    assemblyServicePrice: item.assembly_service_selected ? parseNumber(item.assembly_service_price).toFixed(2) : '',
+  };
+};
+
+const createManualOrderFromOrder = (order: Order, productLookup: Map<string, Product>): ManualOrderFormState => {
+  const parsedNotes = parseManualNotes(order.special_notes);
+  const items = (order.items || []).map((item) => createManualItemFromOrderItem(item, productLookup));
+
+  return {
+    firstName: order.first_name || '',
+    lastName: order.last_name || '',
+    email: order.email || '',
+    phone: order.phone || '',
+    alternativePhone: order.alternative_phone || '',
+    address: order.address || '',
+    city: order.city || '',
+    postalCode: order.postal_code || '',
+    floorNumber: order.floor_number || '',
+    paymentMethod: normalizePaymentMethodForForm(order.payment_method),
+    paymentReference: order.payment_id || '',
+    deliveryCharges: parseNumber(order.delivery_charges).toFixed(2),
+    source: parsedNotes.source,
+    specialNotes: parsedNotes.notes,
+    sendConfirmationEmail: false,
+    items: items.length > 0 ? items : [createManualItem()],
+  };
+};
+
 const Orders = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -262,7 +335,9 @@ const Orders = () => {
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isSubmittingManualOrder, setIsSubmittingManualOrder] = useState(false);
   const [activeProductPickerId, setActiveProductPickerId] = useState<string | null>(null);
+  const [editingOrderId, setEditingOrderId] = useState<number | null>(null);
   const [manualOrder, setManualOrder] = useState<ManualOrderFormState>(() => createInitialManualOrder());
+  const isEditingOrder = editingOrderId !== null;
 
   const manualSubtotal = useMemo(
     () =>
@@ -398,17 +473,47 @@ const Orders = () => {
     void loadProducts();
   }, []);
 
-  const viewOrder = async (id: number) => {
+  const resetManualOrderForm = () => {
+    setManualOrder(createInitialManualOrder());
+    setEditingOrderId(null);
+    setActiveProductPickerId(null);
+  };
+
+  const getOrderDetail = async (id: number) => {
     setIsLoadingDetail(true);
     try {
-      const order = await apiGet<Order>(`/orders/${id}/`);
-      setSelectedOrder(order);
+      return await apiGet<Order>(`/orders/${id}/`);
     } catch {
-      toast.error('Failed to load order details');
-      setSelectedOrder(null);
+      return null;
     } finally {
       setIsLoadingDetail(false);
     }
+  };
+
+  const viewOrder = async (id: number) => {
+    const order = await getOrderDetail(id);
+    if (!order) {
+      toast.error('Failed to load order details');
+      setSelectedOrder(null);
+      return;
+    }
+
+    setSelectedOrder(order);
+  };
+
+  const startEditingOrder = async (id: number) => {
+    const order = await getOrderDetail(id);
+    if (!order) {
+      toast.error('Failed to load order for editing');
+      return;
+    }
+
+    setSelectedOrder(order);
+    setEditingOrderId(order.id);
+    setManualOrder(createManualOrderFromOrder(order, productLookup));
+    setActiveProductPickerId(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    toast.success(`Editing order ORD-${order.id}`);
   };
 
   const updateStatus = async (id: number, action: OrderAction) => {
@@ -421,6 +526,24 @@ const Orders = () => {
       }
     } catch {
       toast.error('Update failed');
+    }
+  };
+
+  const deleteOrder = async (id: number) => {
+    if (!window.confirm(`Delete order ORD-${id}? This cannot be undone.`)) return;
+
+    try {
+      await apiDelete(`/orders/${id}/`);
+      if (selectedOrder?.id === id) {
+        setSelectedOrder(null);
+      }
+      if (editingOrderId === id) {
+        resetManualOrderForm();
+      }
+      await loadOrders();
+      toast.success('Order deleted');
+    } catch {
+      toast.error('Failed to delete order');
     }
   };
 
@@ -495,38 +618,38 @@ const Orders = () => {
     });
   };
 
-  const submitManualOrder = async (downloadPdfAfterCreate: boolean) => {
+  const buildManualOrderPayload = () => {
     if (products.length === 0) {
       toast.error('Products are still loading. Please try again in a moment.');
-      return;
+      return null;
     }
 
     const filledItems = manualOrder.items.filter((item) => !isManualItemEmpty(item));
     if (filledItems.length === 0) {
       toast.error('Add at least one order item');
-      return;
+      return null;
     }
 
     for (const item of filledItems) {
       if (!item.productId) {
         toast.error('Choose a product for each order item');
-        return;
+        return null;
       }
       if (parseNumber(item.unitPrice) <= 0) {
         toast.error('Each order item needs a unit price greater than 0');
-        return;
+        return null;
       }
       if (parseQuantity(item.quantity) <= 0) {
         toast.error('Each order item needs a valid quantity');
-        return;
+        return null;
       }
       if (item.assemblyServiceSelected && parseNumber(item.assemblyServicePrice) <= 0) {
         toast.error('Assembly service items need a service price greater than 0');
-        return;
+        return null;
       }
     }
 
-    const payload = {
+    return {
       first_name: manualOrder.firstName.trim(),
       last_name: manualOrder.lastName.trim(),
       email: manualOrder.email.trim(),
@@ -559,19 +682,26 @@ const Orders = () => {
           : '0.00',
       })),
     };
+  };
+
+  const submitManualOrder = async (downloadPdfAfterCreate: boolean) => {
+    const payload = buildManualOrderPayload();
+    if (!payload) return;
 
     setIsSubmittingManualOrder(true);
     try {
-      const createdOrder = await apiPost<Order>('/orders/', payload);
-      setSelectedOrder(createdOrder);
-      setManualOrder(createInitialManualOrder());
+      const savedOrder = isEditingOrder
+        ? await apiPut<Order>(`/orders/${editingOrderId}/`, payload)
+        : await apiPost<Order>('/orders/', { ...payload, send_confirmation_email: manualOrder.sendConfirmationEmail });
+      setSelectedOrder(savedOrder);
+      resetManualOrderForm();
       await loadOrders();
-      toast.success('Manual order created');
+      toast.success(isEditingOrder ? 'Order updated' : 'Manual order created');
       if (downloadPdfAfterCreate) {
-        await downloadDeliveryPdf(createdOrder.id);
+        await downloadDeliveryPdf(savedOrder.id);
       }
     } catch {
-      toast.error('Failed to create manual order');
+      toast.error(isEditingOrder ? 'Failed to update order' : 'Failed to create manual order');
     } finally {
       setIsSubmittingManualOrder(false);
     }
@@ -588,9 +718,13 @@ const Orders = () => {
         <CardContent className="space-y-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h3 className="text-xl font-semibold text-espresso">Create Manual Order</h3>
+              <h3 className="text-xl font-semibold text-espresso">
+                {isEditingOrder ? `Edit Order ORD-${editingOrderId}` : 'Create Manual Order'}
+              </h3>
               <p className="text-sm text-muted-foreground">
-                Add orders received outside the website and keep them available for record tracking and PDF downloads.
+                {isEditingOrder
+                  ? 'Update an existing order record and save the changes back to the admin history.'
+                  : 'Add orders received outside the website and keep them available for record tracking and PDF downloads.'}
               </p>
             </div>
             <div className="rounded-md border border-dashed border-border bg-muted/20 px-4 py-3 text-right">
@@ -726,8 +860,14 @@ const Orders = () => {
                 value={manualOrder.paymentMethod}
                 onChange={(event) => setManualField('paymentMethod', event.target.value)}
               >
-                <option value="paid">Paid</option>
-                <option value="cash_on_delivery">Cash on delivery</option>
+                {!standardPaymentMethodOptions.some((option) => option.value === manualOrder.paymentMethod) && (
+                  <option value={manualOrder.paymentMethod}>{getPaymentMethodLabel(manualOrder.paymentMethod)}</option>
+                )}
+                {standardPaymentMethodOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="space-y-2">
@@ -1059,22 +1199,26 @@ const Orders = () => {
               <p className="text-lg font-semibold text-espresso">Total: {formatMoney(manualTotal)}</p>
             </div>
             <div className="space-y-3 text-right">
-              <label className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={manualOrder.sendConfirmationEmail}
-                  onChange={(event) => setManualField('sendConfirmationEmail', event.target.checked)}
-                />
-                Send email notifications after saving
-              </label>
+              {isEditingOrder ? (
+                <p className="text-sm text-muted-foreground">Editing updates the saved order record without sending new emails.</p>
+              ) : (
+                <label className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={manualOrder.sendConfirmationEmail}
+                    onChange={(event) => setManualField('sendConfirmationEmail', event.target.checked)}
+                  />
+                  Send email notifications after saving
+                </label>
+              )}
               <div className="flex flex-wrap justify-end gap-2">
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setManualOrder(createInitialManualOrder())}
+                  onClick={resetManualOrderForm}
                   disabled={isSubmittingManualOrder}
                 >
-                  Reset form
+                  {isEditingOrder ? 'Cancel edit' : 'Reset form'}
                 </Button>
                 <Button
                   type="button"
@@ -1082,7 +1226,7 @@ const Orders = () => {
                   onClick={() => void submitManualOrder(false)}
                   disabled={isSubmittingManualOrder}
                 >
-                  {isSubmittingManualOrder ? 'Saving...' : 'Create record'}
+                  {isSubmittingManualOrder ? 'Saving...' : isEditingOrder ? 'Save changes' : 'Create record'}
                 </Button>
                 <Button
                   type="button"
@@ -1090,7 +1234,11 @@ const Orders = () => {
                   disabled={isSubmittingManualOrder}
                 >
                   <Download className="mr-2 h-4 w-4" />
-                  {isSubmittingManualOrder ? 'Saving...' : 'Create and download PDF'}
+                  {isSubmittingManualOrder
+                    ? 'Saving...'
+                    : isEditingOrder
+                      ? 'Save changes and download PDF'
+                      : 'Create and download PDF'}
                 </Button>
               </div>
             </div>
@@ -1110,12 +1258,20 @@ const Orders = () => {
                     .join(' / ') || 'Manual order'}
                 </p>
               </div>
-              <Button variant="outline" onClick={() => setSelectedOrder(null)}>
-                Close
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => void startEditingOrder(selectedOrder.id)}>
+                  <Edit className="mr-2 h-4 w-4" /> Edit
+                </Button>
+                <Button variant="outline" onClick={() => void deleteOrder(selectedOrder.id)}>
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+                </Button>
+                <Button variant="outline" onClick={() => setSelectedOrder(null)}>
+                  Close
+                </Button>
+              </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => void downloadDeliveryPdf(selectedOrder.id)}>
                 <Download className="mr-2 h-4 w-4" /> Download PDF
               </Button>
@@ -1257,13 +1413,13 @@ const Orders = () => {
                   <TableCell className="font-medium">ORD-{order.id}</TableCell>
                   <TableCell>
                     <div className="font-medium">
-                      {order.first_name} {order.last_name}
+                      {[order.first_name, order.last_name].filter(Boolean).join(' ') || 'Manual order'}
                     </div>
                     <div className="max-w-[220px] truncate text-xs text-muted-foreground">{order.address}</div>
                   </TableCell>
                   <TableCell>
-                    <div className="text-sm">{order.email}</div>
-                    <div className="text-xs text-muted-foreground">{order.phone}</div>
+                    <div className="text-sm">{order.email || 'No email'}</div>
+                    <div className="text-xs text-muted-foreground">{order.phone || 'No phone'}</div>
                   </TableCell>
                   <TableCell>{formatMoney(order.total_amount)}</TableCell>
                   <TableCell>
@@ -1280,6 +1436,14 @@ const Orders = () => {
                     >
                       <Eye className="mr-2 h-4 w-4" /> View
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void startEditingOrder(order.id)}
+                      disabled={isLoadingDetail}
+                    >
+                      <Edit className="mr-2 h-4 w-4" /> Edit
+                    </Button>
                     <Button variant="outline" size="sm" onClick={() => void updateStatus(order.id, 'mark_paid')}>
                       <CheckCircle className="mr-2 h-4 w-4" /> Paid
                     </Button>
@@ -1292,6 +1456,9 @@ const Orders = () => {
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => void downloadDeliveryPdf(order.id)}>
                       <Download className="mr-2 h-4 w-4" /> PDF
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => void deleteOrder(order.id)}>
+                      <Trash2 className="mr-2 h-4 w-4" /> Delete
                     </Button>
                   </TableCell>
                 </TableRow>
