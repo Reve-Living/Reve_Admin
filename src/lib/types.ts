@@ -265,6 +265,7 @@ export interface Product {
   description: string;
   short_description?: string;
   features: string[];
+  sofa_feature_highlights?: string[];
   dimensions?: ProductDimensionRow[];
   dimension_images?: { size: string; url: string }[];
   show_dimensions_table?: boolean;

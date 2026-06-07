@@ -107,6 +107,14 @@ const COMMON_COLORS = [
   { name: 'Gold', hex: '#D97706' },
 ];
 
+const splitLineSeparatedList = (value: string): string[] =>
+  value
+    .split(/[\r\n]+|\u2022/g)
+    .map((item) => item.trim().replace(/^[\-\u2013\u2014\u2022]+\s*/, ''))
+    .filter(Boolean);
+
+const containsSofaKeyword = (value?: string | null): boolean => /\bsofas?\b/i.test(String(value || '').trim());
+
 const productSchema = z.object({
     name: z.string().min(1, 'Title is required'),
     slug: z.string().optional(),
@@ -219,6 +227,7 @@ const productSchema = z.object({
       )
       .optional(),
     features: z.array(z.string()).optional(),
+    sofa_feature_highlights: z.array(z.string()).optional(),
     dimensions: z
       .array(
         z.object({
@@ -606,6 +615,7 @@ const ProductForm = () => {
       sort_order: 0,
       is_hidden: false,
       features: [],
+      sofa_feature_highlights: [],
       dimensions: [],
       dimension_images: [],
       dimension_paragraph: '',
@@ -626,6 +636,7 @@ const ProductForm = () => {
   const selectedCategory = watch('category');
   const selectedSubcategory = watch('subcategory');
   const featuresValue = (watch('features') || []).join('\n');
+  const sofaFeatureHighlightsValue = (watch('sofa_feature_highlights') || []).join('\n');
   const subcategoryMatchesCategory = (subcategory: SubCategory, categoryId?: number | string | null) => {
     const numericCategoryId = Number(categoryId || 0);
     if (!numericCategoryId) return false;
@@ -633,6 +644,15 @@ const ProductForm = () => {
       || (subcategory.linked_category_ids || []).map(Number).includes(numericCategoryId);
   };
   const availableSubcategories = subcategories.filter((s) => subcategoryMatchesCategory(s, selectedCategory));
+  const selectedCategoryDetails = categories.find((category) => Number(category.id) === Number(selectedCategory));
+  const selectedSubcategoryDetails = subcategories.find((subcategory) => Number(subcategory.id) === Number(selectedSubcategory));
+  const productNameValue = watch('name');
+  const isSofaSelection =
+    containsSofaKeyword(selectedCategoryDetails?.name) ||
+    containsSofaKeyword(selectedCategoryDetails?.slug) ||
+    containsSofaKeyword(selectedSubcategoryDetails?.name) ||
+    containsSofaKeyword(selectedSubcategoryDetails?.slug) ||
+    containsSofaKeyword(productNameValue);
   const watchPrice = watch('price');
   const watchDiscount = watch('discount_percentage');
   const watchedStyles = watch('styles') || [];
@@ -1233,6 +1253,7 @@ const ProductForm = () => {
         replaceDimensions(dimensions);
         replaceInfoSections(Array.isArray(product.custom_info_sections) ? product.custom_info_sections : []);
         setValue('features', product.features || []);
+        setValue('sofa_feature_highlights', product.sofa_feature_highlights || []);
         setValue('delivery_info', product.delivery_info || '');
         setValue('returns_guarantee', product.returns_guarantee || '');
       } catch {
@@ -1791,6 +1812,7 @@ const ProductForm = () => {
           Number.isFinite(Number(data.subcategory)) ? Number(data.subcategory) : loadedProductSubcategory
         ),
         features: (data.features || []).map((f) => f.trim()).filter(Boolean),
+        sofa_feature_highlights: (data.sofa_feature_highlights || []).map((item) => item.trim()).filter(Boolean),
         dimensions: (data.dimensions || [])
           .map((row) => {
             const measurement = (row.measurement || '').trim();
@@ -1868,6 +1890,9 @@ const ProductForm = () => {
       }
       if (!payload.features || payload.features.length === 0) {
         delete (payload as Partial<ProductFormValues>).features;
+      }
+      if (!payload.sofa_feature_highlights || payload.sofa_feature_highlights.length === 0) {
+        delete (payload as Partial<ProductFormValues>).sofa_feature_highlights;
       }
       if (!payload.dimensions || payload.dimensions.length === 0) {
         delete (payload as Partial<ProductFormValues>).dimensions;
@@ -3242,19 +3267,41 @@ const ProductForm = () => {
             <div className="grid gap-2">
               <label className="text-sm font-medium">Features (one per line)</label>
               <textarea
+                key={`features-${featuresValue}`}
                 className="min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder="Semi-orthopaedic mattress included as standard&#10;Supportive divan base for a stable sleep surface&#10;Castor legs for easy movement"
                 defaultValue={featuresValue}
-                onBlur={(e) => {
-                  const features = e.target.value
-                    .split(/[\r\n]+|â€¢/g)
-                    .map((f) => f.trim().replace(/^[\\-â€“â€”â€¢]+\\s*/, ''))
-                    .filter(Boolean);
-                  setValue('features', features);
-                }}
+                onBlur={(e) =>
+                  setValue('features', splitLineSeparatedList(e.target.value), {
+                    shouldDirty: true,
+                    shouldTouch: true,
+                  })
+                }
               />
               <p className="text-xs text-muted-foreground">Use separate lines (or bullets) to avoid commas becoming extra bullets on the storefront.</p>
             </div>
+
+            {isSofaSelection && (
+              <div className="grid gap-2 rounded-xl border border-[#eaded3] bg-[#fff8f2] p-4">
+                <label className="text-sm font-medium">Sofa Icon Highlights (one per line)</label>
+                <textarea
+                  key={`sofa-highlights-${sofaFeatureHighlightsValue}`}
+                  className="min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder="USB Charging&#10;Cup Holders&#10;Manual Recliner&#10;Bluetooth Enabled&#10;Built-In Speakers"
+                  defaultValue={sofaFeatureHighlightsValue}
+                  onBlur={(e) =>
+                    setValue('sofa_feature_highlights', splitLineSeparatedList(e.target.value), {
+                      shouldDirty: true,
+                      shouldTouch: true,
+                    })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  This section is only for sofas. Common labels like USB, cup holders, manual recliner,
+                  bluetooth, and speakers automatically show matching icons on the product page.
+                </p>
+              </div>
+            )}
 
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
