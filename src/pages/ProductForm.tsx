@@ -113,8 +113,6 @@ const splitLineSeparatedList = (value: string): string[] =>
     .map((item) => item.trim().replace(/^[\-\u2013\u2014\u2022]+\s*/, ''))
     .filter(Boolean);
 
-const containsSofaKeyword = (value?: string | null): boolean => /\bsofas?\b/i.test(String(value || '').trim());
-
 const productSchema = z.object({
     name: z.string().min(1, 'Title is required'),
     slug: z.string().optional(),
@@ -636,7 +634,6 @@ const ProductForm = () => {
   const selectedCategory = watch('category');
   const selectedSubcategory = watch('subcategory');
   const featuresValue = (watch('features') || []).join('\n');
-  const sofaFeatureHighlightsValue = (watch('sofa_feature_highlights') || []).join('\n');
   const subcategoryMatchesCategory = (subcategory: SubCategory, categoryId?: number | string | null) => {
     const numericCategoryId = Number(categoryId || 0);
     if (!numericCategoryId) return false;
@@ -644,15 +641,6 @@ const ProductForm = () => {
       || (subcategory.linked_category_ids || []).map(Number).includes(numericCategoryId);
   };
   const availableSubcategories = subcategories.filter((s) => subcategoryMatchesCategory(s, selectedCategory));
-  const selectedCategoryDetails = categories.find((category) => Number(category.id) === Number(selectedCategory));
-  const selectedSubcategoryDetails = subcategories.find((subcategory) => Number(subcategory.id) === Number(selectedSubcategory));
-  const productNameValue = watch('name');
-  const isSofaSelection =
-    containsSofaKeyword(selectedCategoryDetails?.name) ||
-    containsSofaKeyword(selectedCategoryDetails?.slug) ||
-    containsSofaKeyword(selectedSubcategoryDetails?.name) ||
-    containsSofaKeyword(selectedSubcategoryDetails?.slug) ||
-    containsSofaKeyword(productNameValue);
   const watchPrice = watch('price');
   const watchDiscount = watch('discount_percentage');
   const watchedStyles = watch('styles') || [];
@@ -3278,30 +3266,12 @@ const ProductForm = () => {
                   })
                 }
               />
-              <p className="text-xs text-muted-foreground">Use separate lines (or bullets) to avoid commas becoming extra bullets on the storefront.</p>
+              <p className="text-xs text-muted-foreground">
+                Use separate lines (or bullets) to avoid commas becoming extra bullets on the storefront.
+                Sofa products also auto-generate icon cards from matching feature text like USB, recliner,
+                cup holders, Bluetooth, speakers, and LED lighting.
+              </p>
             </div>
-
-            {isSofaSelection && (
-              <div className="grid gap-2 rounded-xl border border-[#eaded3] bg-[#fff8f2] p-4">
-                <label className="text-sm font-medium">Sofa Icon Highlights (one per line)</label>
-                <textarea
-                  key={`sofa-highlights-${sofaFeatureHighlightsValue}`}
-                  className="min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  placeholder="USB Charging&#10;Cup Holders&#10;Manual Recliner&#10;Bluetooth Enabled&#10;Built-In Speakers"
-                  defaultValue={sofaFeatureHighlightsValue}
-                  onBlur={(e) =>
-                    setValue('sofa_feature_highlights', splitLineSeparatedList(e.target.value), {
-                      shouldDirty: true,
-                      shouldTouch: true,
-                    })
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  This section is only for sofas. Common labels like USB, cup holders, manual recliner,
-                  bluetooth, and speakers automatically show matching icons on the product page.
-                </p>
-              </div>
-            )}
 
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
