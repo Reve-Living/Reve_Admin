@@ -3,12 +3,12 @@ import { Card, CardContent } from '../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { CheckCircle, Download, Edit, Eye, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle, Download, Edit, Eye, Plus, Trash2, XCircle } from 'lucide-react';
 import { apiDelete, apiDownload, apiGet, apiPost, apiPut } from '../lib/api';
 import type { Order, Product } from '../lib/types';
 import { toast } from 'sonner';
 
-type OrderAction = 'mark_paid' | 'mark_delivered';
+type OrderAction = 'mark_paid' | 'mark_delivered' | 'mark_cancelled';
 type ManualOrderSource = 'whatsapp' | 'phone' | 'walk_in' | 'other';
 
 type ManualOrderItem = {
@@ -169,6 +169,36 @@ const getPaymentMethodLabel = (value?: string) =>
 const getStatusLabel = (status: string) => {
   if (status === 'shipped') return 'delivered';
   return status;
+};
+
+const getStatusBadgeClassName = (status: string) => {
+  switch ((status || '').toLowerCase()) {
+    case 'paid':
+      return 'bg-emerald-100 text-emerald-800';
+    case 'shipped':
+      return 'bg-amber-100 text-amber-800';
+    case 'delivered':
+      return 'bg-slate-200 text-slate-800';
+    case 'cancelled':
+      return 'bg-red-100 text-red-800';
+    default:
+      return 'bg-blue-100 text-blue-800';
+  }
+};
+
+const formatDateTime = (value?: string | null) => {
+  if (!value) return '';
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+
+  return parsed.toLocaleString('en-GB', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 const isDisplayableOrderPart = (value?: string) => {
@@ -517,13 +547,23 @@ const Orders = () => {
   };
 
   const updateStatus = async (id: number, action: OrderAction) => {
+    if (action === 'mark_cancelled' && !window.confirm(`Cancel order ORD-${id}? A cancellation email will be sent.`)) {
+      return;
+    }
+
     try {
-      await apiPost(`/orders/${id}/${action}/`, {});
-      toast.success('Order updated');
-      await loadOrders();
+      const updatedOrder = await apiPost<Order>(`/orders/${id}/${action}/`, {});
+      const successMessage =
+        action === 'mark_cancelled'
+          ? 'Order cancelled'
+          : action === 'mark_delivered'
+            ? 'Order marked as delivered'
+            : 'Order marked as paid';
+      toast.success(successMessage);
       if (selectedOrder?.id === id) {
-        await viewOrder(id);
+        setSelectedOrder(updatedOrder);
       }
+      await loadOrders();
     } catch {
       toast.error('Update failed');
     }
@@ -1262,6 +1302,13 @@ const Orders = () => {
                 <Button variant="outline" onClick={() => void startEditingOrder(selectedOrder.id)}>
                   <Edit className="mr-2 h-4 w-4" /> Edit
                 </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => void updateStatus(selectedOrder.id, 'mark_cancelled')}
+                  disabled={selectedOrder.status === 'cancelled' && selectedOrder.refund_status !== 'failed'}
+                >
+                  <XCircle className="mr-2 h-4 w-4" /> {selectedOrder.status === 'cancelled' ? 'Retry Refund' : 'Cancel'}
+                </Button>
                 <Button variant="outline" onClick={() => void deleteOrder(selectedOrder.id)}>
                   <Trash2 className="mr-2 h-4 w-4" /> Delete
                 </Button>
@@ -1301,6 +1348,24 @@ const Orders = () => {
                   <p className="text-sm text-muted-foreground">Reference: {selectedOrder.payment_id}</p>
                 )}
                 <p className="text-sm text-muted-foreground">Status: {getStatusLabel(selectedOrder.status)}</p>
+                {selectedOrder.cancelled_at && (
+                  <p className="text-sm text-red-700">Cancelled on: {formatDateTime(selectedOrder.cancelled_at)}</p>
+                )}
+                {selectedOrder.refund_status && (
+                  <p className="text-sm text-muted-foreground">
+                    Refund: {selectedOrder.refund_status}
+                    {selectedOrder.refund_provider ? ` via ${selectedOrder.refund_provider}` : ''}
+                  </p>
+                )}
+                {selectedOrder.refunded_at && (
+                  <p className="text-sm text-emerald-700">Refunded on: {formatDateTime(selectedOrder.refunded_at)}</p>
+                )}
+                {selectedOrder.refund_id && (
+                  <p className="text-sm text-muted-foreground">Refund reference: {selectedOrder.refund_id}</p>
+                )}
+                {selectedOrder.refund_error && (
+                  <p className="text-sm text-red-700">Refund issue: {selectedOrder.refund_error}</p>
+                )}
                 <p className="mt-2 text-sm font-semibold text-espresso">
                   Total: {formatMoney(selectedOrder.total_amount)}
                 </p>
@@ -1423,7 +1488,7 @@ const Orders = () => {
                   </TableCell>
                   <TableCell>{formatMoney(order.total_amount)}</TableCell>
                   <TableCell>
-                    <span className="rounded-full bg-blue-100 px-2 py-1 text-xs text-blue-800">
+                    <span className={`rounded-full px-2 py-1 text-xs ${getStatusBadgeClassName(order.status)}`}>
                       {getStatusLabel(order.status)}
                     </span>
                   </TableCell>
@@ -1444,15 +1509,29 @@ const Orders = () => {
                     >
                       <Edit className="mr-2 h-4 w-4" /> Edit
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => void updateStatus(order.id, 'mark_paid')}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void updateStatus(order.id, 'mark_paid')}
+                      disabled={order.status === 'cancelled'}
+                    >
                       <CheckCircle className="mr-2 h-4 w-4" /> Paid
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => void updateStatus(order.id, 'mark_delivered')}
+                      disabled={order.status === 'cancelled'}
                     >
                       <CheckCircle className="mr-2 h-4 w-4" /> Delivered
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => void updateStatus(order.id, 'mark_cancelled')}
+                      disabled={order.status === 'cancelled' && order.refund_status !== 'failed'}
+                    >
+                      <XCircle className="mr-2 h-4 w-4" /> {order.status === 'cancelled' ? 'Retry Refund' : 'Cancel'}
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => void downloadDeliveryPdf(order.id)}>
                       <Download className="mr-2 h-4 w-4" /> PDF

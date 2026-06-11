@@ -347,9 +347,17 @@ export interface Order {
   status: string;
   payment_method: string;
   payment_id?: string;
-   special_notes?: string;
-   reference_images?: string[];
+  payment_metadata?: Record<string, string | number | boolean | null>;
+  special_notes?: string;
+  reference_images?: string[];
   created_at: string;
+  cancelled_at?: string | null;
+  refund_status?: string;
+  refund_provider?: string;
+  refund_id?: string;
+  refund_error?: string;
+  refund_amount?: number;
+  refunded_at?: string | null;
   items: OrderItem[];
 }
 
