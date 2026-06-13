@@ -351,6 +351,7 @@ export interface Order {
   special_notes?: string;
   reference_images?: string[];
   created_at: string;
+  confirmation_email_sent_at?: string | null;
   cancelled_at?: string | null;
   refund_status?: string;
   refund_provider?: string;

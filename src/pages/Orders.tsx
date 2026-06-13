@@ -201,6 +201,28 @@ const formatDateTime = (value?: string | null) => {
   });
 };
 
+const getCancelActionState = (order?: Pick<Order, 'status' | 'refund_status'> | null) => {
+  const canRetryRefund = order?.status === 'cancelled' && order?.refund_status === 'failed';
+  return {
+    canRetryRefund,
+    disabled: order?.status === 'cancelled' && !canRetryRefund,
+    label: canRetryRefund ? 'Retry Refund' : 'Cancel',
+  };
+};
+
+const getCancelSuccessMessage = (order: Order) => {
+  if (order.refund_status === 'succeeded') {
+    return 'Order cancelled and refund completed';
+  }
+  if (order.refund_status === 'failed') {
+    return 'Order cancelled, but the refund needs manual follow-up';
+  }
+  if (order.refund_status === 'not_required') {
+    return 'Order cancelled with no refund required';
+  }
+  return 'Order cancelled';
+};
+
 const isDisplayableOrderPart = (value?: string) => {
   const cleaned = (value || '').trim();
   if (!cleaned) return false;
@@ -547,7 +569,12 @@ const Orders = () => {
   };
 
   const updateStatus = async (id: number, action: OrderAction) => {
-    if (action === 'mark_cancelled' && !window.confirm(`Cancel order ORD-${id}? A cancellation email will be sent.`)) {
+    if (
+      action === 'mark_cancelled' &&
+      !window.confirm(
+        `Cancel order ORD-${id}? A cancellation email will be sent, and paid Stripe or PayPal orders will be refunded automatically.`
+      )
+    ) {
       return;
     }
 
@@ -555,7 +582,7 @@ const Orders = () => {
       const updatedOrder = await apiPost<Order>(`/orders/${id}/${action}/`, {});
       const successMessage =
         action === 'mark_cancelled'
-          ? 'Order cancelled'
+          ? getCancelSuccessMessage(updatedOrder)
           : action === 'mark_delivered'
             ? 'Order marked as delivered'
             : 'Order marked as paid';
@@ -564,8 +591,9 @@ const Orders = () => {
         setSelectedOrder(updatedOrder);
       }
       await loadOrders();
-    } catch {
-      toast.error('Update failed');
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : 'Update failed';
+      toast.error(message);
     }
   };
 
@@ -1305,9 +1333,9 @@ const Orders = () => {
                 <Button
                   variant="destructive"
                   onClick={() => void updateStatus(selectedOrder.id, 'mark_cancelled')}
-                  disabled={selectedOrder.status === 'cancelled' && selectedOrder.refund_status !== 'failed'}
+                  disabled={getCancelActionState(selectedOrder).disabled}
                 >
-                  <XCircle className="mr-2 h-4 w-4" /> {selectedOrder.status === 'cancelled' ? 'Retry Refund' : 'Cancel'}
+                  <XCircle className="mr-2 h-4 w-4" /> {getCancelActionState(selectedOrder).label}
                 </Button>
                 <Button variant="outline" onClick={() => void deleteOrder(selectedOrder.id)}>
                   <Trash2 className="mr-2 h-4 w-4" /> Delete
@@ -1529,9 +1557,9 @@ const Orders = () => {
                       variant="destructive"
                       size="sm"
                       onClick={() => void updateStatus(order.id, 'mark_cancelled')}
-                      disabled={order.status === 'cancelled' && order.refund_status !== 'failed'}
+                      disabled={getCancelActionState(order).disabled}
                     >
-                      <XCircle className="mr-2 h-4 w-4" /> {order.status === 'cancelled' ? 'Retry Refund' : 'Cancel'}
+                      <XCircle className="mr-2 h-4 w-4" /> {getCancelActionState(order).label}
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => void downloadDeliveryPdf(order.id)}>
                       <Download className="mr-2 h-4 w-4" /> PDF
