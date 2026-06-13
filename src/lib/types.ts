@@ -412,8 +412,16 @@ export interface Review {
   name: string;
   rating: number;
   comment: string;
+  media?: ReviewMedia[];
   is_visible: boolean;
   created_at?: string;
   created_by?: number | null;
   created_by_username?: string | null;
+}
+
+export interface ReviewMedia {
+  url: string;
+  type: 'image' | 'video';
+  name?: string;
+  mime_type?: string;
 }
