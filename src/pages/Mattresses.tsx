@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Save, Trash2 } from "lucide-react";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "../lib/api";
 import { IMAGE_UPLOAD_ACCEPT, WEBP_UPLOAD_HINT } from "../lib/upload";
-import type { MattressOptionPrice, ProductMattress, Category as ApiCategory, SubCategory as ApiSubCategory } from "../lib/types";
+import type {
+  MattressOptionPrice,
+  Product,
+  ProductMattress,
+  Category as ApiCategory,
+  SubCategory as ApiSubCategory,
+} from "../lib/types";
 import { toast } from "sonner";
 
 type MattressOption = ProductMattress;
@@ -45,6 +51,48 @@ const emptySizeRow = (): MattressOptionPrice => ({
   price_both: null,
 });
 
+const normalizeOptionalNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const hasMattressKeyword = (...values: Array<string | null | undefined>) =>
+  values.some((value) => String(value || "").toLowerCase().includes("mattress"));
+
+const isMattressCategory = (category: Pick<ApiCategory, "name" | "slug">) =>
+  hasMattressKeyword(category.name, category.slug);
+
+const isMattressSourceProduct = (
+  product: Pick<Product, "category_name" | "category_slug" | "subcategory_name" | "subcategory_slug">
+) =>
+  hasMattressKeyword(
+    product.category_name,
+    product.category_slug,
+    product.subcategory_name,
+    product.subcategory_slug
+  );
+
+const mapProductToMattressOption = (product: Product): MattressOption => ({
+  ...emptyOption(),
+  name: product.name || "",
+  description: product.description || product.short_description || "",
+  features: Array.isArray(product.features) ? product.features.filter(Boolean).join("\n") : "",
+  image_url: product.images?.[0]?.url || "",
+  price: normalizeOptionalNumber(product.price),
+  original_price: normalizeOptionalNumber(product.original_price),
+  prices: Array.isArray(product.sizes)
+    ? product.sizes
+        .filter((size) => String(size.name || "").trim().length > 0)
+        .map((size) => ({
+          ...emptySizeRow(),
+          size_label: String(size.name || "").trim(),
+          price: normalizeOptionalNumber(size.price_delta),
+          original_price: normalizeOptionalNumber(product.original_price),
+        }))
+    : [],
+});
+
 const getMattressScopeLabel = (
   item: MattressOption,
   categories: ApiCategory[],
@@ -71,10 +119,24 @@ const Mattresses = () => {
   const [categories, setCategories] = useState<ApiCategory[]>([]);
   const [subcategories, setSubcategories] = useState<ApiSubCategory[]>([]);
   const [importSourceId, setImportSourceId] = useState<number | null>(null);
+  const [productImportSourceId, setProductImportSourceId] = useState<number | null>(null);
+  const [mattressProducts, setMattressProducts] = useState<Product[]>([]);
+  const [mattressProductsLoading, setMattressProductsLoading] = useState(true);
+  const [productImportPreview, setProductImportPreview] = useState<Product | null>(null);
+  const [productImportLoading, setProductImportLoading] = useState(false);
+  const [productImportCache, setProductImportCache] = useState<Record<number, Product>>({});
   const importSource = useMemo(
     () => items.find((item) => item.id === importSourceId) ?? null,
     [importSourceId, items]
   );
+  const productImportSource = useMemo(
+    () => mattressProducts.find((product) => product.id === productImportSourceId) ?? null,
+    [mattressProducts, productImportSourceId]
+  );
+  const assignableCategories = useMemo(() => {
+    const nonMattressCategories = categories.filter((category) => !isMattressCategory(category));
+    return nonMattressCategories.length > 0 ? nonMattressCategories : categories;
+  }, [categories]);
   const selectedCategoryNames = useMemo(
     () => categories.filter((cat) => (editing.categories || []).includes(cat.id)).map((cat) => cat.name),
     [categories, editing.categories]
@@ -111,8 +173,7 @@ const Mattresses = () => {
     apiGet<ApiCategory[]>("/categories/")
       .then((res) => {
         const list = Array.isArray(res) ? res : [];
-        const bedOnly = list.filter((c) => (c.slug || c.name || "").toLowerCase().includes("bed"));
-        setCategories(bedOnly);
+        setCategories(list);
       })
       .catch(() => setCategories([]));
     apiGet<ApiSubCategory[]>("/subcategories/")
@@ -121,11 +182,64 @@ const Mattresses = () => {
         setSubcategories(list);
       })
       .catch(() => setSubcategories([]));
+    apiGet<Product[]>("/products/")
+      .then((res) => {
+        const list = Array.isArray(res) ? res : [];
+        const mattressOnly = list
+          .filter((product) => isMattressSourceProduct(product))
+          .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+        setMattressProducts(mattressOnly);
+      })
+      .catch(() => setMattressProducts([]))
+      .finally(() => setMattressProductsLoading(false));
   }, []);
 
   const resetForm = () => {
     setEditing(emptyOption());
     setImportSourceId(null);
+    setProductImportSourceId(null);
+    setProductImportPreview(null);
+  };
+
+  const loadProductImportPreview = async (productId: number) => {
+    const cached = productImportCache[productId];
+    if (cached) {
+      setProductImportPreview(cached);
+      return cached;
+    }
+
+    const detail = await apiGet<Product>(`/products/${productId}/`);
+    setProductImportCache((prev) => ({ ...prev, [productId]: detail }));
+    setProductImportPreview(detail);
+    return detail;
+  };
+
+  const importMattressProductIntoForm = async (sourceId: number, notify = true) => {
+    const hasScopeSelection = (editing.categories || []).length > 0 || (editing.subcategories || []).length > 0;
+    if (!hasScopeSelection) {
+      toast.error("Choose a category or subcategory first");
+      return;
+    }
+
+    try {
+      const source = await loadProductImportPreview(sourceId);
+      const imported = mapProductToMattressOption(source);
+      const preservedCategories = Array.isArray(editing.categories) ? [...editing.categories] : [];
+      const preservedSubcategories = Array.isArray(editing.subcategories) ? [...editing.subcategories] : [];
+
+      setEditing({
+        ...imported,
+        categories: preservedCategories,
+        subcategories: preservedSubcategories,
+      });
+
+      if (notify) {
+        toast.success("Mattress product imported into form. You can now edit it for this category.");
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to import mattress from product category");
+    }
   };
 
   const importMattressIntoForm = (sourceId: number, notify = true) => {
@@ -161,6 +275,14 @@ const Mattresses = () => {
       return;
     }
     importMattressIntoForm(importSourceId);
+  };
+
+  const handleProductImport = async () => {
+    if (!productImportSourceId) {
+      toast.error("Choose a mattress product to import");
+      return;
+    }
+    await importMattressProductIntoForm(productImportSourceId);
   };
 
   const handleSave = async () => {
@@ -241,7 +363,7 @@ const Mattresses = () => {
               </button>
             </div>
             <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
-              {categories.map((cat) => {
+              {assignableCategories.map((cat) => {
                 const checked = (editing.categories || []).includes(cat.id);
                 const subs = subcategories.filter((s) => subcategoryMatchesCategory(s, cat.id));
                 return (
@@ -284,7 +406,7 @@ const Mattresses = () => {
                   </div>
                 );
               })}
-              {categories.length === 0 && (
+              {assignableCategories.length === 0 && (
                 <p className="text-xs text-muted-foreground">No categories found.</p>
               )}
             </div>
@@ -302,7 +424,119 @@ const Mattresses = () => {
           <div className="rounded-lg border bg-ivory/60 p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-espresso">2. Import existing mattress</p>
+                <p className="text-sm font-semibold text-espresso">2. Import from mattress category</p>
+                <p className="text-xs text-muted-foreground">
+                  Import a live mattress product into this form. It copies the name, description, image, base price,
+                  and size prices from the mattress category.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-semibold text-espresso hover:bg-muted"
+                onClick={() => void handleProductImport()}
+                disabled={
+                  ((editing.categories || []).length === 0 && (editing.subcategories || []).length === 0) ||
+                  !productImportSourceId
+                }
+              >
+                Import category mattress
+              </button>
+            </div>
+            <select
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              value={productImportSourceId ?? ""}
+              onChange={async (e) => {
+                const nextId = e.target.value ? Number(e.target.value) : null;
+                setProductImportSourceId(nextId);
+                if (!nextId) {
+                  setProductImportPreview(null);
+                  return;
+                }
+
+                try {
+                  setProductImportLoading(true);
+                  await loadProductImportPreview(nextId);
+                } catch (err) {
+                  console.error(err);
+                  toast.error("Failed to load mattress category product");
+                } finally {
+                  setProductImportLoading(false);
+                }
+              }}
+            >
+              <option value="">Select a mattress product to import</option>
+              {mattressProducts.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.name} - {product.category_name || product.subcategory_name || "Mattress category"}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              This is useful when you already created mattresses as products and want to reuse their description and
+              size pricing here.
+            </p>
+            {mattressProductsLoading && (
+              <p className="text-xs text-muted-foreground">Loading mattress category products...</p>
+            )}
+            {!mattressProductsLoading && !productImportLoading && mattressProducts.length === 0 && (
+              <p className="text-xs text-muted-foreground">No products were found in the mattress category.</p>
+            )}
+            {productImportLoading && (
+              <p className="text-xs text-muted-foreground">Loading mattress product details...</p>
+            )}
+            {(productImportPreview || productImportSource) && (
+              <div className="rounded-md border border-border/70 bg-white p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Mattress category preview
+                </p>
+                <div className="mt-2 flex items-start gap-3">
+                  {(productImportPreview || productImportSource)?.images?.[0]?.url ? (
+                    <img
+                      src={(productImportPreview || productImportSource)?.images?.[0]?.url}
+                      alt={(productImportPreview || productImportSource)?.name || "Mattress preview"}
+                      className="h-20 w-20 rounded-md border object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-20 w-20 items-center justify-center rounded-md border bg-muted/40 text-center text-[11px] text-muted-foreground">
+                      No image
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <p className="text-sm font-semibold text-espresso">
+                      {(productImportPreview || productImportSource)?.name || "Untitled mattress"}
+                    </p>
+                    <p className="text-xs text-muted-foreground line-clamp-3">
+                      {(productImportPreview || productImportSource)?.description?.trim() ||
+                        (productImportPreview || productImportSource)?.short_description?.trim() ||
+                        "No description on this mattress product yet."}
+                    </p>
+                    <div className="text-xs text-muted-foreground">
+                      Base price:{" "}
+                      <span className="font-medium text-espresso">
+                        {(productImportPreview || productImportSource)?.price ?? "Not set"}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {(productImportPreview || productImportSource)?.sizes?.length
+                        ? `${(productImportPreview || productImportSource)?.sizes?.length} size prices`
+                        : "No size prices"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Source category:{" "}
+                      {(productImportPreview || productImportSource)?.category_name ||
+                        (productImportPreview || productImportSource)?.subcategory_name ||
+                        "Mattress category"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-lg border bg-ivory/60 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-espresso">3. Import existing mattress</p>
                 <p className="text-xs text-muted-foreground">
                   Import copies all mattress details into the form. If you do not change anything, it will save the same mattress details for the selected category.
                 </p>
