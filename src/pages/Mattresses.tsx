@@ -455,7 +455,14 @@ const Mattresses = () => {
 
                 try {
                   setProductImportLoading(true);
-                  await loadProductImportPreview(nextId);
+                  const hasScopeSelection =
+                    (editing.categories || []).length > 0 || (editing.subcategories || []).length > 0;
+
+                  if (hasScopeSelection) {
+                    await importMattressProductIntoForm(nextId, false);
+                  } else {
+                    await loadProductImportPreview(nextId);
+                  }
                 } catch (err) {
                   console.error(err);
                   toast.error("Failed to load mattress category product");
@@ -474,6 +481,10 @@ const Mattresses = () => {
             <p className="text-xs text-muted-foreground">
               This is useful when you already created mattresses as products and want to reuse their description and
               size pricing here.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              When a category is already selected, choosing a mattress here will also fill the editable form below with
+              its name, description, prices, and sizes.
             </p>
             {mattressProductsLoading && (
               <p className="text-xs text-muted-foreground">Loading mattress category products...</p>
