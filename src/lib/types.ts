@@ -206,6 +206,7 @@ export interface ProductMattress {
   product_category_id?: number | null;
   product_subcategory_id?: number | null;
   name?: string;
+  display_name?: string;
   description?: string;
   features?: string;
   image_url?: string;
@@ -224,6 +225,7 @@ export interface ProductMattress {
   sort_order?: number;
   categories?: number[];
   subcategories?: number[];
+  products?: number[];
 }
 
 export interface MattressOptionPrice {

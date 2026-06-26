@@ -15,6 +15,7 @@ type MattressOption = ProductMattress;
 
 const emptyOption = (): MattressOption => ({
   name: "",
+  display_name: "",
   description: "",
   features: "",
   image_url: "",
@@ -25,6 +26,7 @@ const emptyOption = (): MattressOption => ({
   price_bottom: null,
   price_both: null,
   sort_order: 0,
+  products: [],
   prices: [],
 });
 
@@ -40,6 +42,7 @@ const cloneMattressOption = (option: MattressOption): MattressOption => ({
     : [],
   categories: Array.isArray(option.categories) ? [...option.categories] : [],
   subcategories: Array.isArray(option.subcategories) ? [...option.subcategories] : [],
+  products: Array.isArray(option.products) ? [...option.products] : [],
 });
 
 const emptySizeRow = (): MattressOptionPrice => ({
@@ -76,6 +79,7 @@ const isMattressSourceProduct = (
 const mapProductToMattressOption = (product: Product): MattressOption => ({
   ...emptyOption(),
   name: product.name || "",
+  display_name: product.name || "",
   description: product.description || product.short_description || "",
   features: Array.isArray(product.features) ? product.features.filter(Boolean).join("\n") : "",
   image_url: product.images?.[0]?.url || "",
@@ -96,7 +100,8 @@ const mapProductToMattressOption = (product: Product): MattressOption => ({
 const getMattressScopeLabel = (
   item: MattressOption,
   categories: ApiCategory[],
-  subcategories: ApiSubCategory[]
+  subcategories: ApiSubCategory[],
+  products: Product[]
 ) => {
   const categoryNames = categories
     .filter((cat) => (item.categories || []).includes(cat.id))
@@ -104,7 +109,16 @@ const getMattressScopeLabel = (
   const subcategoryNames = subcategories
     .filter((sub) => (item.subcategories || []).includes(sub.id))
     .map((sub) => sub.name);
-  const labels = [...categoryNames, ...subcategoryNames];
+  const matchedProducts = products
+    .filter((product) => (item.products || []).includes(product.id))
+    .map((product) => product.name || `Product ${product.id}`);
+  const productLabel =
+    matchedProducts.length === 0
+      ? []
+      : matchedProducts.length <= 2
+        ? matchedProducts
+        : [`${matchedProducts.length} beds`];
+  const labels = [...categoryNames, ...subcategoryNames, ...productLabel];
   return labels.length > 0 ? labels.join(" | ") : "All categories";
 };
 
@@ -112,12 +126,34 @@ const subcategoryMatchesCategory = (subcategory: ApiSubCategory, categoryId: num
   Number(subcategory.category) === Number(categoryId) ||
   (subcategory.linked_category_ids || []).map(Number).includes(Number(categoryId));
 
+const productMatchesSelectedScope = (
+  product: Product,
+  categoryIds: number[],
+  subcategoryIds: number[]
+) => {
+  const productCategoryId = Number(product.category || 0);
+  const productSubcategoryId = Number(product.subcategory || 0);
+  const normalizedCategoryIds = categoryIds.map(Number).filter(Boolean);
+  const normalizedSubcategoryIds = subcategoryIds.map(Number).filter(Boolean);
+
+  if (normalizedSubcategoryIds.length > 0) {
+    return normalizedSubcategoryIds.includes(productSubcategoryId);
+  }
+
+  if (normalizedCategoryIds.length > 0) {
+    return normalizedCategoryIds.includes(productCategoryId);
+  }
+
+  return false;
+};
+
 const Mattresses = () => {
   const [items, setItems] = useState<MattressOption[]>([]);
   const [editing, setEditing] = useState<MattressOption>(emptyOption());
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<ApiCategory[]>([]);
   const [subcategories, setSubcategories] = useState<ApiSubCategory[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [importSourceId, setImportSourceId] = useState<number | null>(null);
   const [productImportSourceId, setProductImportSourceId] = useState<number | null>(null);
   const [mattressProducts, setMattressProducts] = useState<Product[]>([]);
@@ -144,6 +180,20 @@ const Mattresses = () => {
   const selectedSubcategoryNames = useMemo(
     () => subcategories.filter((sub) => (editing.subcategories || []).includes(sub.id)).map((sub) => sub.name),
     [editing.subcategories, subcategories]
+  );
+  const scopedAssignableProducts = useMemo(() => {
+    const selectedCategories = Array.isArray(editing.categories) ? editing.categories : [];
+    const selectedSubcategories = Array.isArray(editing.subcategories) ? editing.subcategories : [];
+    if (selectedCategories.length === 0 && selectedSubcategories.length === 0) return [];
+
+    return allProducts
+      .filter((product) => !isMattressSourceProduct(product))
+      .filter((product) => productMatchesSelectedScope(product, selectedCategories, selectedSubcategories))
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+  }, [allProducts, editing.categories, editing.subcategories]);
+  const selectedProductNames = useMemo(
+    () => allProducts.filter((product) => (editing.products || []).includes(product.id)).map((product) => product.name),
+    [allProducts, editing.products]
   );
 
   const load = async () => {
@@ -185,14 +235,30 @@ const Mattresses = () => {
     apiGet<Product[]>("/products/")
       .then((res) => {
         const list = Array.isArray(res) ? res : [];
+        setAllProducts(list);
         const mattressOnly = list
           .filter((product) => isMattressSourceProduct(product))
           .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
         setMattressProducts(mattressOnly);
       })
-      .catch(() => setMattressProducts([]))
+      .catch(() => {
+        setAllProducts([]);
+        setMattressProducts([]);
+      })
       .finally(() => setMattressProductsLoading(false));
   }, []);
+
+  useEffect(() => {
+    const allowedProductIds = new Set(scopedAssignableProducts.map((product) => product.id));
+    setEditing((prev) => {
+      const current = Array.isArray(prev.products) ? prev.products.map(Number).filter(Boolean) : [];
+      const filtered = current.filter((id) => allowedProductIds.has(id));
+      const isSame =
+        current.length === filtered.length && current.every((id, index) => id === filtered[index]);
+      if (isSame) return prev;
+      return { ...prev, products: filtered };
+    });
+  }, [scopedAssignableProducts]);
 
   const resetForm = () => {
     setEditing(emptyOption());
@@ -291,6 +357,7 @@ const Mattresses = () => {
     payload.prices = prices;
     payload.categories = (editing.categories || []).filter(Boolean);
     payload.subcategories = (editing.subcategories || []).filter(Boolean);
+    payload.products = (editing.products || []).filter(Boolean);
     try {
       if (editing.id) {
         try {
@@ -357,7 +424,7 @@ const Mattresses = () => {
               <button
                 type="button"
                 className="text-xs text-primary hover:underline"
-                onClick={() => setEditing({ ...editing, categories: [], subcategories: [] })}
+                onClick={() => setEditing({ ...editing, categories: [], subcategories: [], products: [] })}
               >
                 Clear
               </button>
@@ -413,10 +480,10 @@ const Mattresses = () => {
             <p className="text-xs text-muted-foreground">
               Choose the category or subcategory first. Then import a mattress into that selection, or add a new one manually.
             </p>
-            {(selectedCategoryNames.length > 0 || selectedSubcategoryNames.length > 0) && (
+            {(selectedCategoryNames.length > 0 || selectedSubcategoryNames.length > 0 || selectedProductNames.length > 0) && (
               <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                 <span className="font-medium text-espresso">Selected:</span>{" "}
-                {[...selectedCategoryNames, ...selectedSubcategoryNames].join(" • ")}
+                {[...selectedCategoryNames, ...selectedSubcategoryNames, ...selectedProductNames].join(" | ")}
               </div>
             )}
           </div>
@@ -424,7 +491,75 @@ const Mattresses = () => {
           <div className="rounded-lg border bg-ivory/60 p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-espresso">2. Import from mattress category</p>
+                <p className="text-sm font-semibold text-espresso">2. Choose exact beds (optional)</p>
+                <p className="text-xs text-muted-foreground">
+                  Leave this empty to show the mattress on every product in the selected category. Check specific beds
+                  when it should appear only on those kids beds.
+                </p>
+              </div>
+              {scopedAssignableProducts.length > 0 && (
+                <div className="flex items-center gap-3 text-xs">
+                  <button
+                    type="button"
+                    className="text-primary hover:underline"
+                    onClick={() =>
+                      setEditing({ ...editing, products: scopedAssignableProducts.map((product) => product.id) })
+                    }
+                  >
+                    Check all
+                  </button>
+                  <button
+                    type="button"
+                    className="text-primary hover:underline"
+                    onClick={() => setEditing({ ...editing, products: [] })}
+                  >
+                    Clear beds
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {(editing.categories || []).length === 0 && (editing.subcategories || []).length === 0 && (
+                <p className="text-xs text-muted-foreground">Select a category above to load matching bed products.</p>
+              )}
+              {((editing.categories || []).length > 0 || (editing.subcategories || []).length > 0) &&
+                scopedAssignableProducts.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No bed products found for the current selection.</p>
+                )}
+              {scopedAssignableProducts.map((product) => {
+                const checked = (editing.products || []).includes(product.id);
+                return (
+                  <label
+                    key={product.id}
+                    className="flex items-start gap-2 rounded-md border border-border/60 bg-white px-3 py-2 text-sm text-espresso"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const next = new Set(editing.products || []);
+                        if (e.target.checked) next.add(product.id);
+                        else next.delete(product.id);
+                        setEditing({ ...editing, products: Array.from(next) });
+                      }}
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-medium">{product.name}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {product.category_name || "Category"}
+                        {product.subcategory_name ? ` | ${product.subcategory_name}` : ""}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-ivory/60 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-espresso">3. Import from mattress category</p>
                 <p className="text-xs text-muted-foreground">
                   Import a live mattress product into this form. It copies the name, description, image, base price,
                   and size prices from the mattress category.
@@ -547,7 +682,7 @@ const Mattresses = () => {
           <div className="rounded-lg border bg-ivory/60 p-3 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-espresso">3. Import existing mattress</p>
+                <p className="text-sm font-semibold text-espresso">4. Import existing mattress</p>
                 <p className="text-xs text-muted-foreground">
                   Import copies all mattress details into the form. If you do not change anything, it will save the same mattress details for the selected category.
                 </p>
@@ -577,7 +712,7 @@ const Mattresses = () => {
                 .filter((item) => item.id !== editing.id)
                 .map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.name} - {getMattressScopeLabel(item, categories, subcategories)}
+                    {item.name} - {getMattressScopeLabel(item, categories, subcategories, allProducts)}
                   </option>
                 ))}
             </select>
@@ -616,7 +751,7 @@ const Mattresses = () => {
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Assigned to:{" "}
-                      {getMattressScopeLabel(importSource, categories, subcategories)}
+                      {getMattressScopeLabel(importSource, categories, subcategories, allProducts)}
                     </div>
                   </div>
                 </div>
@@ -626,7 +761,18 @@ const Mattresses = () => {
 
           <div className="grid grid-cols-2 gap-3">
             <label className="col-span-2 text-sm font-medium text-espresso">
-              Name
+              Display name
+              <input
+                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                value={editing.display_name || ""}
+                onChange={(e) => setEditing({ ...editing, display_name: e.target.value })}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                This is the storefront label shown on the bed page. Leave blank to use the internal mattress name.
+              </p>
+            </label>
+            <label className="col-span-2 text-sm font-medium text-espresso">
+              Internal name
               <input
                 className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
                 value={editing.name || ""}
@@ -857,11 +1003,22 @@ const Mattresses = () => {
               <div
                 key={`global-${item.id}`}
                 className="rounded-lg border px-3 py-3 hover:border-primary/50 transition cursor-pointer bg-white"
-                onClick={() => setEditing({ ...item })}
+                onClick={() =>
+                  setEditing({
+                    ...item,
+                    categories: Array.isArray(item.categories) ? [...item.categories] : [],
+                    subcategories: Array.isArray(item.subcategories) ? [...item.subcategories] : [],
+                    products: Array.isArray(item.products) ? [...item.products] : [],
+                    prices: Array.isArray(item.prices) ? [...item.prices] : [],
+                  })
+                }
               >
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-base font-semibold text-espresso">{item.name}</p>
+                    {item.display_name && item.display_name !== item.name && (
+                      <p className="text-xs text-muted-foreground mt-1">Shown as: {item.display_name}</p>
+                    )}
                     <p className="text-xs text-muted-foreground line-clamp-2">{item.description}</p>
                     {item.features?.trim() && (
                       <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
@@ -883,8 +1040,17 @@ const Mattresses = () => {
                         const subNames = subcategories
                           .filter((sub) => (item.subcategories || []).includes(sub.id))
                           .map((sub) => sub.name);
-                        const labels = [...categoryNames, ...subNames];
-                        return labels.length > 0 ? labels.join(" • ") : "All categories";
+                        const productNames = allProducts
+                          .filter((product) => (item.products || []).includes(product.id))
+                          .map((product) => product.name || `Product ${product.id}`);
+                        const productLabels =
+                          productNames.length === 0
+                            ? []
+                            : productNames.length <= 2
+                              ? productNames
+                              : [`${productNames.length} beds`];
+                        const labels = [...categoryNames, ...subNames, ...productLabels];
+                        return labels.length > 0 ? labels.join(" | ") : "All categories";
                       })()}
                     </div>
                   </div>
@@ -892,7 +1058,13 @@ const Mattresses = () => {
                     className="text-red-500 hover:text-red-600"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setEditing({ ...item });
+                      setEditing({
+                        ...item,
+                        categories: Array.isArray(item.categories) ? [...item.categories] : [],
+                        subcategories: Array.isArray(item.subcategories) ? [...item.subcategories] : [],
+                        products: Array.isArray(item.products) ? [...item.products] : [],
+                        prices: Array.isArray(item.prices) ? [...item.prices] : [],
+                      });
                       handleDelete(item.id);
                     }}
                   >

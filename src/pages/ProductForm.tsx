@@ -212,6 +212,7 @@ const productSchema = z.object({
       .array(
         z.object({
           name: z.string().optional(),
+          display_name: z.string().optional(),
           description: z.string().optional(),
           image_url: z.string().optional(),
           price: z.number().nullable().optional(),
@@ -415,10 +416,15 @@ const normalizeMattressNumber = (value: unknown): number | null => {
 const mattressMatchesScope = (
   mattress: ProductMattress,
   categoryId?: number | null,
-  subcategoryId?: number | null
+  subcategoryId?: number | null,
+  productId?: number | null
 ) => {
   const categoryIds = Array.isArray(mattress.categories) ? mattress.categories : [];
   const subcategoryIds = Array.isArray(mattress.subcategories) ? mattress.subcategories : [];
+  const productIds = Array.isArray(mattress.products) ? mattress.products : [];
+
+  const matchesProduct = productIds.length === 0 || (productId != null && productId > 0 && productIds.includes(productId));
+  if (!matchesProduct) return false;
 
   if (subcategoryId && subcategoryId > 0) {
     return (
@@ -442,10 +448,11 @@ const buildVisibleMattressRows = (
   library: ProductMattress[],
   effectiveMattresses: ProductMattress[],
   categoryId?: number | null,
-  subcategoryId?: number | null
+  subcategoryId?: number | null,
+  productId?: number | null
 ): MattressFormValue[] => {
   const scopedLibrary = library.filter((mattress) =>
-    mattress.is_active !== false && mattressMatchesScope(mattress, categoryId, subcategoryId)
+    mattress.is_active !== false && mattressMatchesScope(mattress, categoryId, subcategoryId, productId)
   );
   const effectiveLookup = new Map(
     effectiveMattresses
@@ -457,6 +464,7 @@ const buildVisibleMattressRows = (
     const override = effectiveLookup.get(normalizeMattressName(mattress.name));
     return {
       name: mattress.name || '',
+      display_name: normalizeMattressText(mattress.display_name ?? mattress.name),
       description: normalizeMattressText(override?.description ?? mattress.description),
       image_url: normalizeMattressText(override?.image_url ?? mattress.image_url),
       price: normalizeMattressNumber(override?.price ?? mattress.price),
@@ -474,10 +482,11 @@ const buildMattressOverridePayload = (
   mattresses: MattressFormValue[],
   library: ProductMattress[],
   categoryId?: number | null,
-  subcategoryId?: number | null
+  subcategoryId?: number | null,
+  productId?: number | null
 ) => {
   const scopedLibrary = library.filter((mattress) =>
-    mattress.is_active !== false && mattressMatchesScope(mattress, categoryId, subcategoryId)
+    mattress.is_active !== false && mattressMatchesScope(mattress, categoryId, subcategoryId, productId)
   );
   const libraryLookup = new Map(
     scopedLibrary
@@ -1277,7 +1286,8 @@ const ProductForm = () => {
       mattressLibrary,
       loadedProductMattresses,
       categoryId,
-      subcategoryId
+      subcategoryId,
+      Number(id || 0) > 0 ? Number(id) : undefined
     );
   }, [
     loadedProductCategory,
@@ -1797,7 +1807,8 @@ const ProductForm = () => {
           data.mattresses || [],
           mattressLibrary,
           Number.isFinite(Number(data.category)) ? Number(data.category) : loadedProductCategory,
-          Number.isFinite(Number(data.subcategory)) ? Number(data.subcategory) : loadedProductSubcategory
+          Number.isFinite(Number(data.subcategory)) ? Number(data.subcategory) : loadedProductSubcategory,
+          Number(id || 0) > 0 ? Number(id) : undefined
         ),
         features: (data.features || []).map((f) => f.trim()).filter(Boolean),
         sofa_feature_highlights: (data.sofa_feature_highlights || []).map((item) => item.trim()).filter(Boolean),
@@ -2874,7 +2885,10 @@ const ProductForm = () => {
                       size="icon"
                       className="absolute right-2 top-2"
                       onClick={() => {
-                        const mattressName = watchedMattresses[index]?.name || `Mattress ${index + 1}`;
+                        const mattressName =
+                          watchedMattresses[index]?.display_name ||
+                          watchedMattresses[index]?.name ||
+                          `Mattress ${index + 1}`;
                         if (!window.confirm(`Remove ${mattressName} from this product?`)) return;
                         setMattressHiddenState(index, true);
                       }}
@@ -2897,6 +2911,11 @@ const ProductForm = () => {
                         placeholder="Product-specific price"
                         className="col-span-1"
                       />
+                      {watch(`mattresses.${index}.display_name`) && (
+                        <div className="col-span-2 text-xs text-muted-foreground">
+                          Shown on storefront as: {watch(`mattresses.${index}.display_name`)}
+                        </div>
+                      )}
                       <Input
                         type="file"
                         accept={IMAGE_UPLOAD_ACCEPT}
