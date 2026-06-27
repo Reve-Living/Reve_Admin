@@ -443,7 +443,7 @@ const Categories = () => {
       if (targetSubId) {
         await Promise.all(
           subCategoryFormData.selectedProducts.map((productId) =>
-            apiPut(`/products/${productId}/`, { subcategory: targetSubId })
+            apiPatch(`/products/${productId}/`, { subcategory: targetSubId })
           )
         );
       }
