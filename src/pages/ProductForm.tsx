@@ -401,6 +401,7 @@ const normalizeStoredSizePrice = (productBasePrice: number, storedValue?: number
   const base = Number.isFinite(productBasePrice) ? Number(productBasePrice) : 0;
   const raw = Number(storedValue ?? 0);
   if (!Number.isFinite(raw)) return base;
+  if (raw <= 0 && base > 0) return base;
   return raw;
 };
 

@@ -4,6 +4,7 @@ export interface Category {
   slug: string;
   description: string;
   image: string;
+  is_hidden?: boolean;
   show_in_collections?: boolean;
   show_in_all_collections?: boolean;
   image_alt_text?: string;
@@ -23,6 +24,7 @@ export interface SubCategory {
   slug: string;
   description: string;
   image: string;
+  is_hidden?: boolean;
   sort_order?: number;
   show_in_collections?: boolean;
   show_in_all_collections?: boolean;

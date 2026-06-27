@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Edit, Trash2, Plus, X, ChevronDown, ChevronRight, FolderPlus, Filter } from 'lucide-react';
+import { Edit, Trash2, Plus, X, ChevronDown, ChevronRight, FolderPlus, Filter, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiDelete, apiGet, apiPost, apiPut, apiUpload, apiPatch } from '../lib/api';
 import type { Category, Product, SubCategory, FilterType, CategoryFilter, FilterOption } from '../lib/types';
@@ -50,11 +50,13 @@ const Categories = () => {
   const [categoryMetaDescription, setCategoryMetaDescription] = useState('');
   const [categoryImageAltText, setCategoryImageAltText] = useState('');
   const [categorySortOrder, setCategorySortOrder] = useState(0);
+  const [categoryHidden, setCategoryHidden] = useState(false);
   const [subCategoryFormData, setSubCategoryFormData] = useState({
     name: '',
     slug: '',
     description: '',
     imageUrl: '',
+    isHidden: false,
     imageAltText: '',
     metaTitle: '',
     metaDescription: '',
@@ -147,6 +149,7 @@ const Categories = () => {
       setCategoryMetaDescription(category.meta_description || '');
       setCategoryImageAltText(category.image_alt_text || '');
       setCategorySortOrder(Number(category.sort_order) || 0);
+      setCategoryHidden(Boolean(category.is_hidden));
     } else {
       setEditingCategory(null);
       setCategoryName('');
@@ -157,6 +160,7 @@ const Categories = () => {
       setCategoryMetaDescription('');
       setCategoryImageAltText('');
       setCategorySortOrder(0);
+      setCategoryHidden(false);
     }
     setShowCategoryModal(true);
   };
@@ -170,6 +174,7 @@ const Categories = () => {
         slug: subCategory.slug || '',
         description: subCategory.description,
         imageUrl: subCategory.image,
+        isHidden: Boolean(subCategory.is_hidden),
         imageAltText: subCategory.image_alt_text || '',
         metaTitle: subCategory.meta_title || '',
         metaDescription: subCategory.meta_description || '',
@@ -187,6 +192,7 @@ const Categories = () => {
         slug: '',
         description: '',
         imageUrl: '',
+        isHidden: false,
         imageAltText: '',
         metaTitle: '',
         metaDescription: '',
@@ -371,6 +377,7 @@ const Categories = () => {
           meta_description: categoryMetaDescription.trim(),
           image_alt_text: categoryImageAltText.trim(),
           sort_order: Number.isFinite(categorySortOrder) ? categorySortOrder : 0,
+          is_hidden: categoryHidden,
         });
         toast.success('Category updated successfully');
       } else {
@@ -383,6 +390,7 @@ const Categories = () => {
           meta_description: categoryMetaDescription.trim(),
           image_alt_text: categoryImageAltText.trim(),
           sort_order: Number.isFinite(categorySortOrder) ? categorySortOrder : 0,
+          is_hidden: categoryHidden,
         });
         toast.success('Category created successfully');
       }
@@ -395,9 +403,21 @@ const Categories = () => {
       setCategoryMetaDescription('');
       setCategoryImageAltText('');
       setCategorySortOrder(0);
+      setCategoryHidden(false);
       await loadData();
     } catch {
       toast.error('Failed to save category');
+    }
+  };
+
+  const handleToggleCategoryHidden = async (category: Category) => {
+    const nextHidden = !category.is_hidden;
+    try {
+      await apiPatch(`/categories/${category.id}/`, { is_hidden: nextHidden });
+      toast.success(nextHidden ? 'Category hidden from the storefront' : 'Category is now visible on the storefront');
+      await loadData();
+    } catch {
+      toast.error('Failed to update category visibility');
     }
   };
 
@@ -419,6 +439,7 @@ const Categories = () => {
           meta_title: subCategoryFormData.metaTitle.trim(),
           meta_description: subCategoryFormData.metaDescription.trim(),
           sort_order: Number.isFinite(subCategoryFormData.sort_order) ? subCategoryFormData.sort_order : 0,
+          is_hidden: subCategoryFormData.isHidden,
           category: selectedCategoryId,
           additional_categories: subCategoryFormData.linkedCategoryIds.filter((id) => id !== selectedCategoryId),
         });
@@ -433,6 +454,7 @@ const Categories = () => {
           meta_title: subCategoryFormData.metaTitle.trim(),
           meta_description: subCategoryFormData.metaDescription.trim(),
           sort_order: Number.isFinite(subCategoryFormData.sort_order) ? subCategoryFormData.sort_order : 0,
+          is_hidden: subCategoryFormData.isHidden,
           category: selectedCategoryId,
           additional_categories: subCategoryFormData.linkedCategoryIds.filter((id) => id !== selectedCategoryId),
         });
@@ -539,6 +561,17 @@ const Categories = () => {
       setOptionEditData({ name: '', slug: '', color_code: '' });
     } else {
       toast.error('Filter type not found');
+    }
+  };
+
+  const handleToggleSubCategoryHidden = async (subCategory: SubCategory) => {
+    const nextHidden = !subCategory.is_hidden;
+    try {
+      await apiPatch(`/subcategories/${subCategory.id}/`, { is_hidden: nextHidden });
+      toast.success(nextHidden ? 'Subcategory hidden from the storefront' : 'Subcategory is now visible on the storefront');
+      await loadData();
+    } catch {
+      toast.error('Failed to update subcategory visibility');
     }
   };
 
@@ -731,7 +764,16 @@ const Categories = () => {
                     )}
                   </button>
                   <div>
-                    <CardTitle className="text-xl">{category.name}</CardTitle>
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-xl">{category.name}</CardTitle>
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs ${
+                          category.is_hidden ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                        }`}
+                      >
+                        {category.is_hidden ? 'Hidden' : 'Visible'}
+                      </span>
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       Display order: {Number(category.sort_order) || 0}
                     </p>
@@ -756,6 +798,14 @@ const Categories = () => {
                   >
                     <FolderPlus className="h-4 w-4 mr-2" />
                     Add Subcategory
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    title={category.is_hidden ? 'Show category on storefront' : 'Hide category from storefront'}
+                    onClick={() => handleToggleCategoryHidden(category)}
+                  >
+                    {category.is_hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                   </Button>
                   <Button
                     variant="ghost"
@@ -840,7 +890,16 @@ const Categories = () => {
                             />
                           )}
                           <div className="flex-1">
-                            <div className="font-medium text-lg">{sub.name}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="font-medium text-lg">{sub.name}</div>
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs ${
+                                  sub.is_hidden ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                                }`}
+                              >
+                                {sub.is_hidden ? 'Hidden' : 'Visible'}
+                              </span>
+                            </div>
                             <p className="text-xs text-muted-foreground mt-1">
                               {sub.category === category.id ? 'Main category' : 'Also linked here'}
                             </p>
@@ -857,6 +916,15 @@ const Categories = () => {
                             </p>
                           </div>
                           <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title={sub.is_hidden ? 'Show subcategory on storefront' : 'Hide subcategory from storefront'}
+                              disabled={isPromoting}
+                              onClick={() => handleToggleSubCategoryHidden(sub)}
+                            >
+                              {sub.is_hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -1017,6 +1085,16 @@ const Categories = () => {
                   Lower numbers appear first. Higher numbers appear later.
                 </p>
               </div>
+
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={categoryHidden}
+                  onChange={(e) => setCategoryHidden(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                Hide from storefront
+              </label>
 
               <div className="flex justify-end gap-2 pt-4">
                 <Button variant="outline" onClick={() => setShowCategoryModal(false)}>Cancel</Button>
@@ -1317,6 +1395,21 @@ const Categories = () => {
                   placeholder="0"
                 />
               </div>
+
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={subCategoryFormData.isHidden}
+                  onChange={(e) =>
+                    setSubCategoryFormData({
+                      ...subCategoryFormData,
+                      isHidden: e.target.checked,
+                    })
+                  }
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                Hide from storefront
+              </label>
 
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Subcategory Image</label>
