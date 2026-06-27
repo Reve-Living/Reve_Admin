@@ -16,6 +16,7 @@ type MattressOption = ProductMattress;
 const emptyOption = (): MattressOption => ({
   name: "",
   display_name: "",
+  kids_button_label: "",
   description: "",
   features: "",
   image_url: "",
@@ -62,6 +63,12 @@ const normalizeOptionalNumber = (value: unknown): number | null => {
 
 const hasMattressKeyword = (...values: Array<string | null | undefined>) =>
   values.some((value) => String(value || "").toLowerCase().includes("mattress"));
+
+const isKidsBedsEntity = (...values: Array<string | null | undefined>) =>
+  values.some((value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    return normalized === "kids beds" || normalized === "kids-beds" || normalized.includes("kids bed");
+  });
 
 const isMattressCategory = (category: Pick<ApiCategory, "name" | "slug">) =>
   hasMattressKeyword(category.name, category.slug);
@@ -195,6 +202,19 @@ const Mattresses = () => {
     () => allProducts.filter((product) => (editing.products || []).includes(product.id)).map((product) => product.name),
     [allProducts, editing.products]
   );
+  const isKidsBedsScope = useMemo(() => {
+    const selectedCategoryMatches = categories.some(
+      (category) =>
+        (editing.categories || []).includes(category.id) &&
+        isKidsBedsEntity(category.name, category.slug)
+    );
+    const selectedProductMatches = allProducts.some(
+      (product) =>
+        (editing.products || []).includes(product.id) &&
+        isKidsBedsEntity(product.category_name, product.category_slug)
+    );
+    return selectedCategoryMatches || selectedProductMatches;
+  }, [allProducts, categories, editing.categories, editing.products]);
 
   const load = async () => {
     try {
@@ -746,9 +766,13 @@ const Mattresses = () => {
                       </span>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {importSource.prices?.length ? `${importSource.prices.length} size prices` : "No size prices"}{" "}
-                      {importSource.enable_bunk_positions ? "| bunk enabled" : "| bunk off"}
+                      {importSource.prices?.length ? `${importSource.prices.length} size prices` : "No size prices"}
                     </div>
+                    {importSource.kids_button_label && (
+                      <div className="text-xs text-muted-foreground">
+                        Kids bed button: <span className="font-medium text-espresso">{importSource.kids_button_label}</span>
+                      </div>
+                    )}
                     <div className="text-xs text-muted-foreground">
                       Assigned to:{" "}
                       {getMattressScopeLabel(importSource, categories, subcategories, allProducts)}
@@ -771,6 +795,21 @@ const Mattresses = () => {
                 This is the storefront label shown on the bed page. Leave blank to use the internal mattress name.
               </p>
             </label>
+            {isKidsBedsScope && (
+              <label className="col-span-2 text-sm font-medium text-espresso">
+                Kids bed button label
+                <input
+                  className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                  value={editing.kids_button_label || ""}
+                  onChange={(e) => setEditing({ ...editing, kids_button_label: e.target.value })}
+                  placeholder="e.g. Top Mattress, Bottom Mattress"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Used only on Kids Beds. Mattresses with the same label will appear under the same button in the
+                  Add a Mattress popup.
+                </p>
+              </label>
+            )}
             <label className="col-span-2 text-sm font-medium text-espresso">
               Internal name
               <input
@@ -877,36 +916,6 @@ const Mattresses = () => {
               <p className="mt-1 text-xs text-muted-foreground">
                 Use 1, 2, 3... to control order. 0 means unsorted and appears after ordered items.
               </p>
-            </label>
-            <label className="flex items-center gap-2 text-sm font-medium text-espresso">
-              <input
-                type="checkbox"
-                checked={Boolean(editing.enable_bunk_positions)}
-                onChange={(e) => setEditing({ ...editing, enable_bunk_positions: e.target.checked })}
-              />
-              Enable bunk positions (Top / Bottom)
-            </label>
-            <label className="text-sm font-medium text-espresso">
-              Bunk price top
-              <input
-                type="number"
-                step="0.01"
-                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-                value={editing.price_top ?? ""}
-                onChange={(e) => setEditing({ ...editing, price_top: e.target.value === "" ? null : Number(e.target.value) })}
-              />
-            </label>
-            <label className="text-sm font-medium text-espresso">
-              Bunk price bottom
-              <input
-                type="number"
-                step="0.01"
-                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-                value={editing.price_bottom ?? ""}
-                onChange={(e) =>
-                  setEditing({ ...editing, price_bottom: e.target.value === "" ? null : Number(e.target.value) })
-                }
-              />
             </label>
           </div>
 
@@ -1026,9 +1035,14 @@ const Mattresses = () => {
                       </p>
                     )}
                     <div className="text-xs text-muted-foreground mt-1">
-                      Base: {item.price ?? 0} {item.enable_bunk_positions ? "• bunk" : ""}
+                      Base: {item.price ?? 0}
                       {item.prices && item.prices.length ? ` • ${item.prices.length} size prices` : ""}
                     </div>
+                    {item.kids_button_label && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Kids bed button: {item.kids_button_label}
+                      </div>
+                    )}
                     <div className="text-xs text-muted-foreground mt-1">
                       Sort order: {item.sort_order ?? 0}
                     </div>

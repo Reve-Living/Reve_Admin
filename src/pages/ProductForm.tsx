@@ -213,6 +213,7 @@ const productSchema = z.object({
         z.object({
           name: z.string().optional(),
           display_name: z.string().optional(),
+          kids_button_label: z.string().optional(),
           description: z.string().optional(),
           image_url: z.string().optional(),
           price: z.number().nullable().optional(),
@@ -465,6 +466,7 @@ const buildVisibleMattressRows = (
     return {
       name: mattress.name || '',
       display_name: normalizeMattressText(mattress.display_name ?? mattress.name),
+      kids_button_label: normalizeMattressText(mattress.kids_button_label),
       description: normalizeMattressText(override?.description ?? mattress.description),
       image_url: normalizeMattressText(override?.image_url ?? mattress.image_url),
       price: normalizeMattressNumber(override?.price ?? mattress.price),
@@ -650,6 +652,18 @@ const ProductForm = () => {
       || (subcategory.linked_category_ids || []).map(Number).includes(numericCategoryId);
   };
   const availableSubcategories = subcategories.filter((s) => subcategoryMatchesCategory(s, selectedCategory));
+  const isKidsBedsCategorySelected = useMemo(() => {
+    const selectedCategoryId = Number(selectedCategory || 0);
+    if (!selectedCategoryId) return false;
+    const category = categories.find((item) => Number(item.id) === selectedCategoryId);
+    const normalizedName = String(category?.name || '').trim().toLowerCase();
+    const normalizedSlug = String(category?.slug || '').trim().toLowerCase();
+    return (
+      normalizedName === 'kids beds' ||
+      normalizedSlug === 'kids-beds' ||
+      normalizedName.includes('kids bed')
+    );
+  }, [categories, selectedCategory]);
   const watchPrice = watch('price');
   const watchDiscount = watch('discount_percentage');
   const watchedStyles = watch('styles') || [];
@@ -1168,6 +1182,8 @@ const ProductForm = () => {
         }));
         const mattresses = (product.mattresses || []).map((m) => ({
           name: m.name || '',
+          display_name: m.display_name || '',
+          kids_button_label: m.kids_button_label || '',
           description: m.description || '',
           image_url: m.image_url || '',
           price: m.price !== undefined && m.price !== null ? Number(m.price) : null,
@@ -2916,6 +2932,11 @@ const ProductForm = () => {
                           Shown on storefront as: {watch(`mattresses.${index}.display_name`)}
                         </div>
                       )}
+                      {watch(`mattresses.${index}.kids_button_label`) && (
+                        <div className="col-span-2 text-xs text-muted-foreground">
+                          Kids bed button: {watch(`mattresses.${index}.kids_button_label`)}
+                        </div>
+                      )}
                       <Input
                         type="file"
                         accept={IMAGE_UPLOAD_ACCEPT}
@@ -2930,33 +2951,37 @@ const ProductForm = () => {
                       <div className="col-span-1 flex items-center rounded-md border border-dashed px-3 text-xs text-muted-foreground">
                         Override image for this product only
                       </div>
-                      <label className="col-span-2 flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(watch(`mattresses.${index}.enable_bunk_positions`))}
-                          onChange={(e) => setValue(`mattresses.${index}.enable_bunk_positions`, e.target.checked)}
-                        />
-                        Allow bunk selection (Top / Bottom) for this mattress.
-                      </label>
-                      {watch(`mattresses.${index}.enable_bunk_positions`) && (
-                        <div className="col-span-2 grid grid-cols-2 gap-2">
-                          <Input
-                            type="number"
-                            step="0.01"
-                            {...register(`mattresses.${index}.price_top` as const, {
-                              setValueAs: (val) => (val === '' || val === null || val === undefined ? null : Number(val)),
-                            })}
-                            placeholder="Top price (£)"
-                          />
-                          <Input
-                            type="number"
-                            step="0.01"
-                            {...register(`mattresses.${index}.price_bottom` as const, {
-                              setValueAs: (val) => (val === '' || val === null || val === undefined ? null : Number(val)),
-                            })}
-                            placeholder="Bottom price (£)"
-                          />
-                        </div>
+                      {!isKidsBedsCategorySelected && (
+                        <>
+                          <label className="col-span-2 flex items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(watch(`mattresses.${index}.enable_bunk_positions`))}
+                              onChange={(e) => setValue(`mattresses.${index}.enable_bunk_positions`, e.target.checked)}
+                            />
+                            Allow bunk selection (Top / Bottom) for this mattress.
+                          </label>
+                          {watch(`mattresses.${index}.enable_bunk_positions`) && (
+                            <div className="col-span-2 grid grid-cols-2 gap-2">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                {...register(`mattresses.${index}.price_top` as const, {
+                                  setValueAs: (val) => (val === '' || val === null || val === undefined ? null : Number(val)),
+                                })}
+                                placeholder="Top price (£)"
+                              />
+                              <Input
+                                type="number"
+                                step="0.01"
+                                {...register(`mattresses.${index}.price_bottom` as const, {
+                                  setValueAs: (val) => (val === '' || val === null || val === undefined ? null : Number(val)),
+                                })}
+                                placeholder="Bottom price (£)"
+                              />
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                     {watch(`mattresses.${index}.image_url`) && (

@@ -1,12 +1,28 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
 import { Copy, Edit, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../lib/api';
 import type { Product, Category, SubCategory } from '../lib/types';
 import { toast } from 'sonner';
+
+const buildProductListQuery = (
+  category: string | 'all',
+  subcategory: string | 'all',
+  search: string,
+  focusProductId?: number | null
+) => {
+  const params = new URLSearchParams();
+  if (category !== 'all') params.set('category', category);
+  if (subcategory !== 'all') params.set('subcategory', subcategory);
+  if (search.trim()) params.set('q', search);
+  if (focusProductId) params.set('focus', String(focusProductId));
+  const query = params.toString();
+  return query ? `?${query}` : '';
+};
 
 const Products = () => {
   const navigate = useNavigate();
@@ -15,6 +31,10 @@ const Products = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | 'all'>(() => searchParams.get('category') || 'all');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | 'all'>(() => searchParams.get('subcategory') || 'all');
+  const [highlightedProductId, setHighlightedProductId] = useState<number | null>(null);
+  const productRowRefs = useRef(new Map<number, HTMLTableRowElement>());
+  const productSearch = searchParams.get('q') || '';
+  const focusProductId = Number(searchParams.get('focus') || 0);
   const getDisplayOrder = (value?: number) => {
     const num = Number(value);
     return Number.isFinite(num) ? num : 0;
@@ -27,18 +47,16 @@ const Products = () => {
     setSelectedSubcategory((current) => (current === nextSubcategory ? current : nextSubcategory));
   }, [searchParams]);
 
-  const updateProductFilters = (category: string | 'all', subcategory: string | 'all') => {
-    const nextParams = new URLSearchParams(searchParams);
-
-    if (category === 'all') nextParams.delete('category');
-    else nextParams.set('category', category);
-
-    if (subcategory === 'all') nextParams.delete('subcategory');
-    else nextParams.set('subcategory', subcategory);
-
+  const updateProductFilters = (
+    category: string | 'all',
+    subcategory: string | 'all',
+    search: string = productSearch,
+    focusId?: number | null
+  ) => {
     setSelectedCategory(category);
     setSelectedSubcategory(subcategory);
-    setSearchParams(nextParams, { replace: true });
+    const query = buildProductListQuery(category, subcategory, search, focusId);
+    setSearchParams(new URLSearchParams(query), { replace: true });
   };
 
   const loadData = async () => {
@@ -96,9 +114,17 @@ const Products = () => {
     try {
       const duplicated = await apiPost<Product>(`/products/${product.id}/duplicate/`, {});
       toast.success('Product duplicated. The copy is hidden until you finish editing it.');
-      navigate(`/products/edit/${duplicated.id}${productFormSearch}`, {
-        state: { autoRevealOnSave: true },
-      });
+      navigate(
+        `/products/edit/${duplicated.id}${buildProductListQuery(
+          selectedCategory,
+          selectedSubcategory,
+          productSearch,
+          duplicated.id
+        )}`,
+        {
+          state: { autoRevealOnSave: true },
+        }
+      );
     } catch {
       toast.error('Failed to duplicate product');
     }
@@ -121,10 +147,18 @@ const Products = () => {
     const targetSubcategory = availableSubcategories.find(
       (sub) => sub.slug === selectedSubcategory || String(sub.id) === selectedSubcategory
     );
+    const normalizedSearch = productSearch.trim().toLowerCase();
 
     const targetCategorySlug = (targetCategory?.slug || '').toLowerCase();
     const targetCategoryId = targetCategory?.id;
     const targetCategoryName = (targetCategory?.name || '').toLowerCase();
+    const targetCategorySubcategoryIds = new Set((targetCategory?.subcategories || []).map((sub) => Number(sub.id)));
+    const targetCategorySubcategorySlugs = new Set(
+      (targetCategory?.subcategories || []).map((sub) => (sub.slug || '').toLowerCase()).filter(Boolean)
+    );
+    const targetCategorySubcategoryNames = new Set(
+      (targetCategory?.subcategories || []).map((sub) => (sub.name || '').toLowerCase()).filter(Boolean)
+    );
     const targetSubcategorySlug = (targetSubcategory?.slug || '').toLowerCase();
     const targetSubcategoryId = targetSubcategory?.id;
     const targetSubcategoryName = (targetSubcategory?.name || '').toLowerCase();
@@ -143,7 +177,12 @@ const Products = () => {
         (targetCategoryId != null && Number.isFinite(productCategoryId)
           ? productCategoryId === targetCategoryId
           : false) ||
-        (targetCategoryName ? productCategoryName === targetCategoryName : false);
+        (targetCategoryName ? productCategoryName === targetCategoryName : false) ||
+        (targetCategorySubcategorySlugs.size > 0 ? targetCategorySubcategorySlugs.has(productSubcategorySlug) : false) ||
+        (targetCategorySubcategoryIds.size > 0 && Number.isFinite(productSubcategoryId)
+          ? targetCategorySubcategoryIds.has(productSubcategoryId)
+          : false) ||
+        (targetCategorySubcategoryNames.size > 0 ? targetCategorySubcategoryNames.has(productSubcategoryName) : false);
 
       const matchesSubcategory =
         selectedSubcategory === 'all' ||
@@ -153,17 +192,48 @@ const Products = () => {
           : false) ||
         (targetSubcategoryName ? productSubcategoryName === targetSubcategoryName : false);
 
-      return matchesCategory && matchesSubcategory;
+      const matchesSearch =
+        normalizedSearch.length === 0 ||
+        [
+          product.name,
+          product.slug,
+          product.category_name,
+          product.category_slug,
+          product.subcategory_name,
+          product.subcategory_slug,
+          String(product.id || ''),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(normalizedSearch);
+
+      return matchesCategory && matchesSubcategory && matchesSearch;
     });
-  }, [products, selectedCategoryData, availableSubcategories, selectedCategory, selectedSubcategory]);
+  }, [products, selectedCategoryData, availableSubcategories, selectedCategory, selectedSubcategory, productSearch]);
 
   const productFormSearch = useMemo(() => {
-    const params = new URLSearchParams();
-    if (selectedCategory !== 'all') params.set('category', selectedCategory);
-    if (selectedSubcategory !== 'all') params.set('subcategory', selectedSubcategory);
-    const query = params.toString();
-    return query ? `?${query}` : '';
-  }, [selectedCategory, selectedSubcategory]);
+    return buildProductListQuery(selectedCategory, selectedSubcategory, productSearch);
+  }, [selectedCategory, selectedSubcategory, productSearch]);
+
+  useEffect(() => {
+    if (!focusProductId) return;
+    const row = productRowRefs.current.get(focusProductId);
+    if (!row) return;
+
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightedProductId(focusProductId);
+
+    const timeoutId = window.setTimeout(() => {
+      setHighlightedProductId((current) => (current === focusProductId ? null : current));
+    }, 2500);
+
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('focus');
+    setSearchParams(nextParams, { replace: true });
+
+    return () => window.clearTimeout(timeoutId);
+  }, [focusProductId, filteredProducts, searchParams, setSearchParams]);
 
   return (
     <div className="space-y-6">
@@ -179,47 +249,60 @@ const Products = () => {
         </Link>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="text-sm font-medium text-muted-foreground">Filter by category</label>
-        <select
-          className="min-w-[220px] rounded-md border border-input bg-white px-3 py-2 text-sm"
-          value={selectedCategory === 'all' ? '' : selectedCategory}
-          onChange={(e) => {
-            const val = e.target.value;
-            updateProductFilters(val === '' ? 'all' : val, 'all');
-          }}
-        >
-          <option value="">All categories</option>
-          {categories.map((cat) => (
-            <option key={cat.id} value={cat.slug || String(cat.id)}>
-              {cat.name}
-            </option>
-          ))}
-        </select>
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-[260px] flex-1">
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">Search products</label>
+          <Input
+            value={productSearch}
+            onChange={(e) => updateProductFilters(selectedCategory, selectedSubcategory, e.target.value)}
+            placeholder="Search by name, initials, slug, category, subcategory, or ID"
+          />
+        </div>
 
-        <label className="text-sm font-medium text-muted-foreground">Filter by subcategory</label>
-        <select
-          className="min-w-[220px] rounded-md border border-input bg-white px-3 py-2 text-sm"
-          value={selectedSubcategory === 'all' ? '' : selectedSubcategory}
-          onChange={(e) => {
-            const val = e.target.value;
-            updateProductFilters(selectedCategory, val === '' ? 'all' : val);
-          }}
-        >
-          <option value="">All subcategories</option>
-          {availableSubcategories.map((sub) => (
-            <option key={sub.id} value={sub.slug || String(sub.id)}>
-              {sub.name}
-            </option>
-          ))}
-        </select>
+        <div className="min-w-[220px]">
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">Filter by category</label>
+          <select
+            className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+            value={selectedCategory === 'all' ? '' : selectedCategory}
+            onChange={(e) => {
+              const val = e.target.value;
+              updateProductFilters(val === '' ? 'all' : val, 'all');
+            }}
+          >
+            <option value="">All categories</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.slug || String(cat.id)}>
+                {cat.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        {(selectedCategory !== 'all' || selectedSubcategory !== 'all') && (
+        <div className="min-w-[220px]">
+          <label className="mb-2 block text-sm font-medium text-muted-foreground">Filter by subcategory</label>
+          <select
+            className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm"
+            value={selectedSubcategory === 'all' ? '' : selectedSubcategory}
+            onChange={(e) => {
+              const val = e.target.value;
+              updateProductFilters(selectedCategory, val === '' ? 'all' : val);
+            }}
+          >
+            <option value="">All subcategories</option>
+            {availableSubcategories.map((sub) => (
+              <option key={sub.id} value={sub.slug || String(sub.id)}>
+                {sub.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {(selectedCategory !== 'all' || selectedSubcategory !== 'all' || productSearch.trim().length > 0) && (
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
-              updateProductFilters('all', 'all');
+              updateProductFilters('all', 'all', '');
             }}
           >
             Clear
@@ -243,7 +326,14 @@ const Products = () => {
             </TableHeader>
             <TableBody>
               {filteredProducts.map((product) => (
-                <TableRow key={product.id}>
+                <TableRow
+                  key={product.id}
+                  ref={(node) => {
+                    if (node) productRowRefs.current.set(product.id, node);
+                    else productRowRefs.current.delete(product.id);
+                  }}
+                  className={highlightedProductId === product.id ? 'bg-primary/10 transition-colors duration-300' : ''}
+                >
                   <TableCell className="font-medium">{product.name}</TableCell>
                   <TableCell>{Number.isFinite(Number(product.sort_order)) ? product.sort_order : 0}</TableCell>
                   <TableCell>{product.category_name || product.category_slug || product.category}</TableCell>
@@ -283,7 +373,14 @@ const Products = () => {
                     >
                       {product.is_hidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                     </Button>
-                    <Link to={`/products/edit/${product.id}${productFormSearch}`}>
+                    <Link
+                      to={`/products/edit/${product.id}${buildProductListQuery(
+                        selectedCategory,
+                        selectedSubcategory,
+                        productSearch,
+                        product.id
+                      )}`}
+                    >
                       <Button variant="ghost" size="icon">
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -302,7 +399,7 @@ const Products = () => {
               {filteredProducts.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
-                    No products found for the selected filters.
+                    No products found for the current search or filters.
                   </TableCell>
                 </TableRow>
               )}
