@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import type { FieldErrors } from 'react-hook-form';
 import { apiGet, apiPost, apiPut, apiUpload } from '../lib/api';
-import type { Category, Product, ProductDimensionRow, SubCategory, FilterType, FilterOption, CategoryFilter, ProductMattress } from '../lib/types';
+import type { Category, Product, ProductDimensionRow, ProductStockStatus, SubCategory, FilterType, FilterOption, CategoryFilter, ProductMattress } from '../lib/types';
 import { ICON_UPLOAD_ACCEPT, IMAGE_UPLOAD_ACCEPT, WEBP_UPLOAD_HINT } from '../lib/upload';
 
 const resolveCategoryId = (product: Product, categories: Category[]): number | undefined => {
@@ -113,6 +113,28 @@ const splitLineSeparatedList = (value: string): string[] =>
     .map((item) => item.trim().replace(/^[\-\u2013\u2014\u2022]+\s*/, ''))
     .filter(Boolean);
 
+const PRODUCT_STOCK_STATUS_OPTIONS: Array<{ value: ProductStockStatus; label: string }> = [
+  { value: 'available', label: 'Available' },
+  { value: 'low_stock', label: 'Low stock' },
+  { value: 'out_of_stock', label: 'Out of stock' },
+  { value: 'stock_check_needed', label: 'Stock check needed' },
+];
+
+const normalizeProductStockStatus = (
+  stockStatus?: ProductStockStatus | string | null,
+  inStock: boolean = true
+): ProductStockStatus => {
+  switch (stockStatus) {
+    case 'available':
+    case 'low_stock':
+    case 'out_of_stock':
+    case 'stock_check_needed':
+      return stockStatus;
+    default:
+      return inStock ? 'available' : 'out_of_stock';
+  }
+};
+
 const productSchema = z.object({
     name: z.string().min(1, 'Title is required'),
     slug: z.string().optional(),
@@ -128,6 +150,7 @@ const productSchema = z.object({
     delivery_charges: z.number().min(0).optional().nullable(),
     assembly_service_enabled: z.boolean().optional(),
     assembly_service_price: z.number().min(0).optional().nullable(),
+    stock_status: z.enum(['available', 'low_stock', 'out_of_stock', 'stock_check_needed']).optional(),
     sort_order: z.number().optional(),
     is_hidden: z.boolean().optional(),
     is_bestseller: z.boolean().optional(),
@@ -622,6 +645,7 @@ const ProductForm = () => {
       delivery_charges: 0,
       assembly_service_enabled: false,
       assembly_service_price: 0,
+      stock_status: 'available',
       sort_order: 0,
       is_hidden: false,
       features: [],
@@ -1122,6 +1146,7 @@ const ProductForm = () => {
         setValue('delivery_charges', Number(product.delivery_charges) || 0);
         setValue('assembly_service_enabled', product.assembly_service_enabled === true);
         setValue('assembly_service_price', Number(product.assembly_service_price) || 0);
+        setValue('stock_status', normalizeProductStockStatus(product.stock_status, product.in_stock !== false));
         setValue('is_hidden', autoRevealOnSave ? false : product.is_hidden === true);
         setValue('is_bestseller', product.is_bestseller);
         setValue('is_new', product.is_new);
@@ -1740,6 +1765,7 @@ const ProductForm = () => {
           data.assembly_service_enabled && Number.isFinite(data.assembly_service_price ?? null)
             ? Number(data.assembly_service_price)
             : 0,
+        stock_status: normalizeProductStockStatus(data.stock_status),
         is_hidden: autoRevealOnSave ? false : data.is_hidden === true,
         is_bestseller: data.is_bestseller === true,
         is_new: data.is_new === true,
@@ -2057,7 +2083,7 @@ const ProductForm = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Price (Â£) *</label>
                 <Input type="number" {...register('price', { valueAsNumber: true })} />
@@ -2086,6 +2112,19 @@ const ProductForm = () => {
                   placeholder="1 = first, 2 = second, 0 = unsorted"
                 />
                 <p className="text-[11px] text-muted-foreground">Use 1 for first position. Leave 0 to place the product after manually ordered items.</p>
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Stock Status</label>
+                <select
+                  className="h-11 rounded-md border border-input bg-background px-3 text-sm"
+                  {...register('stock_status')}
+                >
+                  {PRODUCT_STOCK_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Copy, Edit, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../lib/api';
-import type { Product, Category, SubCategory } from '../lib/types';
+import type { Product, ProductStockStatus, Category, SubCategory } from '../lib/types';
 import { toast } from 'sonner';
 
 const buildProductListQuery = (
@@ -22,6 +22,32 @@ const buildProductListQuery = (
   if (focusProductId) params.set('focus', String(focusProductId));
   const query = params.toString();
   return query ? `?${query}` : '';
+};
+
+const normalizeProductStockStatus = (product: Product): ProductStockStatus => {
+  switch (product.stock_status) {
+    case 'available':
+    case 'low_stock':
+    case 'out_of_stock':
+    case 'stock_check_needed':
+      return product.stock_status;
+    default:
+      return product.in_stock ? 'available' : 'out_of_stock';
+  }
+};
+
+const getStockStatusMeta = (status: ProductStockStatus) => {
+  switch (status) {
+    case 'available':
+      return { label: 'Available', className: 'bg-green-100 text-green-800' };
+    case 'low_stock':
+      return { label: 'Low Stock', className: 'bg-amber-100 text-amber-800' };
+    case 'stock_check_needed':
+      return { label: 'Stock Check Needed', className: 'bg-orange-100 text-orange-800' };
+    case 'out_of_stock':
+    default:
+      return { label: 'Out of Stock', className: 'bg-red-100 text-red-800' };
+  }
 };
 
 const Products = () => {
@@ -319,13 +345,15 @@ const Products = () => {
                 <TableHead>Display Order</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Price</TableHead>
-                <TableHead>Stock</TableHead>
+                <TableHead>Stock Status</TableHead>
                 <TableHead>Visibility</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProducts.map((product) => (
+              {filteredProducts.map((product) => {
+                const stockStatusMeta = getStockStatusMeta(normalizeProductStockStatus(product));
+                return (
                 <TableRow
                   key={product.id}
                   ref={(node) => {
@@ -339,12 +367,8 @@ const Products = () => {
                   <TableCell>{product.category_name || product.category_slug || product.category}</TableCell>
                   <TableCell>£{product.price}</TableCell>
                   <TableCell>
-                    <span
-                      className={`px-2 py-1 rounded-full text-xs ${
-                        product.in_stock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {product.in_stock ? 'In Stock' : 'Out of Stock'}
+                    <span className={`px-2 py-1 rounded-full text-xs ${stockStatusMeta.className}`}>
+                      {stockStatusMeta.label}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -395,7 +419,8 @@ const Products = () => {
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
               {filteredProducts.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">

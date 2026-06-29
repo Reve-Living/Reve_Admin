@@ -21,6 +21,49 @@ const toSafeSlug = (value: string) =>
 const getLinkedCategoryIds = (subcategory: SubCategory) =>
   Array.from(new Set([Number(subcategory.category), ...((subcategory.linked_category_ids || []).map(Number))])).filter(Boolean);
 
+const isImportedProduct = (product?: Product | null) => Number(product?.imported_from_product || 0) > 0;
+
+const splitProductSearchTokens = (value: string) =>
+  String(value || '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+
+const buildProductInitials = (value: string) => splitProductSearchTokens(value).map((token) => token[0]).join('');
+
+const matchesInitialsQuery = (initials: string, query: string) => {
+  if (!initials || !query) return false;
+  if (initials.startsWith(query)) return true;
+
+  let queryIndex = 0;
+  for (const char of initials) {
+    if (char === query[queryIndex]) {
+      queryIndex += 1;
+      if (queryIndex === query.length) return true;
+    }
+  }
+
+  return false;
+};
+
+const matchesProductPickerSearch = (product: Product, rawQuery: string) => {
+  const query = String(rawQuery || '').trim().toLowerCase();
+  if (!query) return true;
+
+  const searchableText = [
+    product.name,
+    product.slug,
+    String(product.id || ''),
+    product.category_name,
+    product.subcategory_name,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return searchableText.includes(query) || matchesInitialsQuery(buildProductInitials(product.name), query);
+};
+
 const Categories = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -51,6 +94,7 @@ const Categories = () => {
   const [categoryImageAltText, setCategoryImageAltText] = useState('');
   const [categorySortOrder, setCategorySortOrder] = useState(0);
   const [categoryHidden, setCategoryHidden] = useState(false);
+  const [subCategoryProductSearch, setSubCategoryProductSearch] = useState('');
   const [subCategoryFormData, setSubCategoryFormData] = useState({
     name: '',
     slug: '',
@@ -166,6 +210,7 @@ const Categories = () => {
   };
 
   const openSubCategoryModal = (categoryId: number, subCategory?: SubCategory) => {
+    setSubCategoryProductSearch('');
     if (subCategory) {
       setSelectedCategoryId(subCategory.category);
       setEditingSubCategory(subCategory);
@@ -463,11 +508,50 @@ const Categories = () => {
       }
 
       if (targetSubId) {
-        await Promise.all(
-          subCategoryFormData.selectedProducts.map((productId) =>
-            apiPatch(`/products/${productId}/`, { subcategory: targetSubId })
-          )
+        const selectedProductIds = new Set(subCategoryFormData.selectedProducts.map(Number));
+        const currentSubcategoryProducts = products.filter((product) => Number(product.subcategory) === Number(targetSubId));
+        const sourceProductsToImport = Array.from(selectedProductIds)
+          .map((productId) => products.find((product) => product.id === productId) || null)
+          .filter((product): product is Product => Boolean(product));
+
+        const importRequests = sourceProductsToImport
+          .filter((product) => {
+            const alreadyOwnedByTarget =
+              Number(product.category) === Number(selectedCategoryId) &&
+              Number(product.subcategory) === Number(targetSubId);
+            return !alreadyOwnedByTarget;
+          })
+          .map((product) =>
+            apiPost<Product>(`/products/${product.id}/import-copy/`, {
+              category: selectedCategoryId,
+              subcategory: targetSubId,
+            })
+          );
+
+        const legacyCrossCategoryProducts = currentSubcategoryProducts.filter(
+          (product) =>
+            !isImportedProduct(product) &&
+            Number(product.category) !== Number(selectedCategoryId)
         );
+        const legacyCleanupRequests = legacyCrossCategoryProducts.map((product) =>
+          apiPatch(`/products/${product.id}/`, { subcategory: null })
+        );
+
+        const importedProductsToRemove = currentSubcategoryProducts.filter(
+          (product) =>
+            isImportedProduct(product) &&
+            !selectedProductIds.has(product.id) &&
+            !selectedProductIds.has(Number(product.imported_from_product || 0))
+        );
+        const importedDeleteRequests = importedProductsToRemove.map((product) =>
+          apiDelete(`/products/${product.id}/`)
+        );
+
+        await Promise.all([
+          ...importRequests,
+          ...legacyCleanupRequests,
+          ...importedDeleteRequests,
+        ]);
       }
       setShowSubCategoryModal(false);
       await loadData();
@@ -692,7 +776,18 @@ const Categories = () => {
       .flatMap((c) => c.subcategories || [])
       .find((s) => s.id === id)?.name || undefined;
 
-  const subcategoryProducts = useMemo(() => products, [products]);
+  const subcategoryProducts = useMemo(() => {
+    const editingSubcategoryId = Number(editingSubCategory?.id || 0);
+    return products.filter((product) => {
+      if (!isImportedProduct(product)) return true;
+      return editingSubcategoryId > 0 && Number(product.subcategory) === editingSubcategoryId;
+    });
+  }, [editingSubCategory, products]);
+
+  const filteredSubcategoryProducts = useMemo(
+    () => subcategoryProducts.filter((product) => matchesProductPickerSearch(product, subCategoryProductSearch)),
+    [subcategoryProducts, subCategoryProductSearch]
+  );
 
   const handleUploadImage = async (file?: File) => {
     if (!file) return;
@@ -1474,8 +1569,13 @@ const Categories = () => {
 
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Select Products</label>
+                <Input
+                  value={subCategoryProductSearch}
+                  onChange={(e) => setSubCategoryProductSearch(e.target.value)}
+                  placeholder="Search products by name, initials, slug, or ID"
+                />
                 <div className="border rounded-md p-3 max-h-64 overflow-y-auto space-y-2">
-                  {subcategoryProducts.map((product) => (
+                  {filteredSubcategoryProducts.map((product) => (
                     <label key={product.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
                       <input
                         type="checkbox"
@@ -1483,9 +1583,15 @@ const Categories = () => {
                         onChange={() => toggleProductSelection(product.id)}
                         className="h-4 w-4 rounded border-gray-300"
                       />
-                      <span className="text-sm">{product.name} - £{product.price}</span>
+                      <span className="text-sm">
+                        {product.name} - GBP {product.price}
+                        {isImportedProduct(product) ? ' (imported copy)' : ''}
+                      </span>
                     </label>
                   ))}
+                  {filteredSubcategoryProducts.length === 0 && (
+                    <p className="p-2 text-sm text-muted-foreground">No products match that search.</p>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {subCategoryFormData.selectedProducts.length} product(s) selected
