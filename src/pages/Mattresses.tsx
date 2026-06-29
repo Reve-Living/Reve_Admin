@@ -35,6 +35,7 @@ const cloneMattressOption = (option: MattressOption): MattressOption => ({
   ...emptyOption(),
   ...option,
   id: undefined,
+  display_name: "",
   prices: Array.isArray(option.prices)
     ? option.prices.map((row) => ({
         ...row,
@@ -64,12 +65,6 @@ const normalizeOptionalNumber = (value: unknown): number | null => {
 const hasMattressKeyword = (...values: Array<string | null | undefined>) =>
   values.some((value) => String(value || "").toLowerCase().includes("mattress"));
 
-const isKidsBedsEntity = (...values: Array<string | null | undefined>) =>
-  values.some((value) => {
-    const normalized = String(value || "").trim().toLowerCase();
-    return normalized === "kids beds" || normalized === "kids-beds" || normalized.includes("kids bed");
-  });
-
 const isMattressCategory = (category: Pick<ApiCategory, "name" | "slug">) =>
   hasMattressKeyword(category.name, category.slug);
 
@@ -86,7 +81,7 @@ const isMattressSourceProduct = (
 const mapProductToMattressOption = (product: Product): MattressOption => ({
   ...emptyOption(),
   name: product.name || "",
-  display_name: product.name || "",
+  display_name: "",
   description: product.description || product.short_description || "",
   features: Array.isArray(product.features) ? product.features.filter(Boolean).join("\n") : "",
   image_url: product.images?.[0]?.url || "",
@@ -202,20 +197,6 @@ const Mattresses = () => {
     () => allProducts.filter((product) => (editing.products || []).includes(product.id)).map((product) => product.name),
     [allProducts, editing.products]
   );
-  const isKidsBedsScope = useMemo(() => {
-    const selectedCategoryMatches = categories.some(
-      (category) =>
-        (editing.categories || []).includes(category.id) &&
-        isKidsBedsEntity(category.name, category.slug)
-    );
-    const selectedProductMatches = allProducts.some(
-      (product) =>
-        (editing.products || []).includes(product.id) &&
-        isKidsBedsEntity(product.category_name, product.category_slug)
-    );
-    return selectedCategoryMatches || selectedProductMatches;
-  }, [allProducts, categories, editing.categories, editing.products]);
-
   const load = async () => {
     try {
       setLoading(true);
@@ -372,7 +353,7 @@ const Mattresses = () => {
   };
 
   const handleSave = async () => {
-    const payload = { ...editing };
+    const payload = { ...editing, display_name: "" };
     const prices = (editing.prices || []).filter((p) => p.size_label?.trim());
     payload.prices = prices;
     payload.categories = (editing.categories || []).filter(Boolean);
@@ -770,7 +751,7 @@ const Mattresses = () => {
                     </div>
                     {importSource.kids_button_label && (
                       <div className="text-xs text-muted-foreground">
-                        Kids bed button: <span className="font-medium text-espresso">{importSource.kids_button_label}</span>
+                        Button group: <span className="font-medium text-espresso">{importSource.kids_button_label}</span>
                       </div>
                     )}
                     <div className="text-xs text-muted-foreground">
@@ -785,31 +766,18 @@ const Mattresses = () => {
 
           <div className="grid grid-cols-2 gap-3">
             <label className="col-span-2 text-sm font-medium text-espresso">
-              Display name
+              Mattress button label
               <input
                 className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-                value={editing.display_name || ""}
-                onChange={(e) => setEditing({ ...editing, display_name: e.target.value })}
+                value={editing.kids_button_label || ""}
+                onChange={(e) => setEditing({ ...editing, kids_button_label: e.target.value })}
+                placeholder="e.g. Top Mattress, Bottom Mattress"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                This is the storefront label shown on the bed page. Leave blank to use the internal mattress name.
+                Optional. Leave this blank to keep the normal single mattress list. Mattresses with the same label
+                will be grouped under one button in the Add a Mattress popup.
               </p>
             </label>
-            {isKidsBedsScope && (
-              <label className="col-span-2 text-sm font-medium text-espresso">
-                Kids bed button label
-                <input
-                  className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
-                  value={editing.kids_button_label || ""}
-                  onChange={(e) => setEditing({ ...editing, kids_button_label: e.target.value })}
-                  placeholder="e.g. Top Mattress, Bottom Mattress"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Used only on Kids Beds. Mattresses with the same label will appear under the same button in the
-                  Add a Mattress popup.
-                </p>
-              </label>
-            )}
             <label className="col-span-2 text-sm font-medium text-espresso">
               Internal name
               <input
@@ -1025,9 +993,6 @@ const Mattresses = () => {
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-base font-semibold text-espresso">{item.name}</p>
-                    {item.display_name && item.display_name !== item.name && (
-                      <p className="text-xs text-muted-foreground mt-1">Shown as: {item.display_name}</p>
-                    )}
                     <p className="text-xs text-muted-foreground line-clamp-2">{item.description}</p>
                     {item.features?.trim() && (
                       <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
@@ -1040,7 +1005,7 @@ const Mattresses = () => {
                     </div>
                     {item.kids_button_label && (
                       <div className="text-xs text-muted-foreground mt-1">
-                        Kids bed button: {item.kids_button_label}
+                        Button group: {item.kids_button_label}
                       </div>
                     )}
                     <div className="text-xs text-muted-foreground mt-1">

@@ -677,18 +677,6 @@ const ProductForm = () => {
       || (subcategory.linked_category_ids || []).map(Number).includes(numericCategoryId);
   };
   const availableSubcategories = subcategories.filter((s) => subcategoryMatchesCategory(s, selectedCategory));
-  const isKidsBedsCategorySelected = useMemo(() => {
-    const selectedCategoryId = Number(selectedCategory || 0);
-    if (!selectedCategoryId) return false;
-    const category = categories.find((item) => Number(item.id) === selectedCategoryId);
-    const normalizedName = String(category?.name || '').trim().toLowerCase();
-    const normalizedSlug = String(category?.slug || '').trim().toLowerCase();
-    return (
-      normalizedName === 'kids beds' ||
-      normalizedSlug === 'kids-beds' ||
-      normalizedName.includes('kids bed')
-    );
-  }, [categories, selectedCategory]);
   const watchPrice = watch('price');
   const watchDiscount = watch('discount_percentage');
   const watchedStyles = watch('styles') || [];
@@ -1359,6 +1347,14 @@ const ProductForm = () => {
         .map((field, index) => ({ field, index }))
         .filter(({ index }) => Boolean(watchedMattresses[index]?.is_hidden)),
     [mattressFields, watchedMattresses]
+  );
+  const mattressButtonGroupsEnabled = useMemo(
+    () =>
+      watchedMattresses.some(
+        (mattress) =>
+          !mattress?.is_hidden && normalizeMattressText(mattress?.kids_button_label).length > 0
+      ),
+    [watchedMattresses]
   );
 
   const setMattressHiddenState = (index: number, isHidden: boolean) => {
@@ -2941,10 +2937,7 @@ const ProductForm = () => {
                       size="icon"
                       className="absolute right-2 top-2"
                       onClick={() => {
-                        const mattressName =
-                          watchedMattresses[index]?.display_name ||
-                          watchedMattresses[index]?.name ||
-                          `Mattress ${index + 1}`;
+                        const mattressName = watchedMattresses[index]?.name || `Mattress ${index + 1}`;
                         if (!window.confirm(`Remove ${mattressName} from this product?`)) return;
                         setMattressHiddenState(index, true);
                       }}
@@ -2967,14 +2960,9 @@ const ProductForm = () => {
                         placeholder="Product-specific price"
                         className="col-span-1"
                       />
-                      {watch(`mattresses.${index}.display_name`) && (
-                        <div className="col-span-2 text-xs text-muted-foreground">
-                          Shown on storefront as: {watch(`mattresses.${index}.display_name`)}
-                        </div>
-                      )}
                       {watch(`mattresses.${index}.kids_button_label`) && (
                         <div className="col-span-2 text-xs text-muted-foreground">
-                          Kids bed button: {watch(`mattresses.${index}.kids_button_label`)}
+                          Button group: {watch(`mattresses.${index}.kids_button_label`)}
                         </div>
                       )}
                       <Input
@@ -2991,7 +2979,7 @@ const ProductForm = () => {
                       <div className="col-span-1 flex items-center rounded-md border border-dashed px-3 text-xs text-muted-foreground">
                         Override image for this product only
                       </div>
-                      {!isKidsBedsCategorySelected && (
+                      {!mattressButtonGroupsEnabled && (
                         <>
                           <label className="col-span-2 flex items-center gap-2 text-sm">
                             <input
@@ -3022,6 +3010,12 @@ const ProductForm = () => {
                             </div>
                           )}
                         </>
+                      )}
+                      {mattressButtonGroupsEnabled && (
+                        <div className="col-span-2 text-xs text-muted-foreground">
+                          Button-group mattresses use the grouped Add a Mattress popup, so bunk position pricing is
+                          disabled for this product.
+                        </div>
                       )}
                     </div>
                     {watch(`mattresses.${index}.image_url`) && (
