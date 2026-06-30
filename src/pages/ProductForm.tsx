@@ -1291,14 +1291,22 @@ const ProductForm = () => {
   }, [id, categories, subcategories, autoRevealOnSave, setValue, replaceImages, replaceVideos, replaceColors, replaceSizes, replaceStyles, replaceFabrics, replaceFaqs, replaceDimensions, replaceInfoSections, replaceFilterValues]);
 
   useEffect(() => {
-    if (!id) return;
-    if (loadedProductCategory && Number(selectedCategory || 0) !== Number(loadedProductCategory)) {
-      setValue('category', loadedProductCategory);
+    const categoryId = Number(selectedCategory || 0);
+    const subcategoryId = Number(selectedSubcategory || 0);
+    if (!categoryId || !subcategoryId) return;
+
+    const selectedSubcategoryRecord = subcategories.find(
+      (subcategory) => Number(subcategory.id) === subcategoryId
+    );
+    if (!selectedSubcategoryRecord) return;
+
+    if (!subcategoryMatchesCategory(selectedSubcategoryRecord, categoryId)) {
+      setValue('subcategory', null, {
+        shouldDirty: true,
+        shouldTouch: true,
+      });
     }
-    if (loadedProductSubcategory !== null && Number(selectedSubcategory || 0) !== Number(loadedProductSubcategory)) {
-      setValue('subcategory', loadedProductSubcategory);
-    }
-  }, [id, loadedProductCategory, loadedProductSubcategory, selectedCategory, selectedSubcategory, setValue]);
+  }, [selectedCategory, selectedSubcategory, setValue, subcategories]);
 
   const scopedCategoryMattresses = useMemo(() => {
     const categoryId =
@@ -1725,6 +1733,14 @@ const ProductForm = () => {
     if (isSaving) return;
     setIsSaving(true);
     try {
+      const normalizedCategory =
+        Number.isFinite(Number(data.category)) && Number(data.category) > 0
+          ? Number(data.category)
+          : 0;
+      const normalizedSubcategory =
+        Number.isFinite(Number(data.subcategory)) && Number(data.subcategory) > 0
+          ? Number(data.subcategory)
+          : null;
       const discountPercentage =
         typeof data.discount_percentage === 'number' && !Number.isNaN(data.discount_percentage)
           ? data.discount_percentage
@@ -1745,13 +1761,8 @@ const ProductForm = () => {
         slug: (data.slug || '').trim(),
         meta_title: (data.meta_title || '').trim(),
         meta_description: (data.meta_description || '').trim(),
-        category:
-          Number.isFinite(Number(data.category)) && Number(data.category) > 0
-            ? Number(data.category)
-            : loadedProductCategory || 0,
-        subcategory: Number.isFinite(Number(data.subcategory)) && Number(data.subcategory) > 0
-          ? Number(data.subcategory)
-          : loadedProductSubcategory ?? null,
+        category: normalizedCategory,
+        subcategory: normalizedSubcategory,
         price: Number.isFinite(data.price) ? data.price : 0,
         delivery_charges: Number.isFinite(data.delivery_charges ?? null)
           ? Number(data.delivery_charges)
@@ -1845,8 +1856,8 @@ const ProductForm = () => {
         mattresses: buildMattressOverridePayload(
           data.mattresses || [],
           mattressLibrary,
-          Number.isFinite(Number(data.category)) ? Number(data.category) : loadedProductCategory,
-          Number.isFinite(Number(data.subcategory)) ? Number(data.subcategory) : loadedProductSubcategory,
+          normalizedCategory > 0 ? normalizedCategory : undefined,
+          normalizedSubcategory,
           Number(id || 0) > 0 ? Number(id) : undefined
         ),
         features: (data.features || []).map((f) => f.trim()).filter(Boolean),
