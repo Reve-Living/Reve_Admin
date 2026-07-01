@@ -952,7 +952,7 @@ const ProductForm = () => {
         const [cats, subs, products, _filters, options, mattresses] = await Promise.all([
           apiGet<Category[]>('/categories/'),
           apiGet<SubCategory[]>('/subcategories/'),
-          apiGet<Product[]>('/products/'),
+          apiGet<Product[]>('/products/?admin_summary=1'),
           apiGet<FilterType[]>('/filter-types/'),
           apiGet<FilterOption[]>('/filter-options/'),
           apiGet<ProductMattress[]>('/mattress-options/'),
@@ -1966,10 +1966,10 @@ const ProductForm = () => {
       }
 
       if (id) {
-        await apiPut(`/products/${id}/`, payload);
+        await apiPut(`/products/${id}/?response=none`, payload);
         toast.success('Product updated successfully');
       } else {
-        await apiPost<{ id: number }>('/products/', payload);
+        await apiPost<void>('/products/?response=none', payload);
         toast.success('Product created successfully');
       }
 
