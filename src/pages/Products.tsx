@@ -50,11 +50,64 @@ const getStockStatusMeta = (status: ProductStockStatus) => {
   }
 };
 
+const PRODUCTS_PAGE_CACHE_KEY = 'admin-products-page:v1';
+const PRODUCTS_PAGE_CACHE_TTL_MS = 2 * 60 * 1000;
+
+type ProductsPageCache = {
+  savedAt: number;
+  products: Product[];
+  categories: Category[];
+};
+
+const normalizeList = <T,>(data: T[] | { results?: T[] }): T[] => {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray((data as { results?: T[] }).results)) return (data as { results: T[] }).results;
+  return [];
+};
+
+const readProductsPageCache = (): ProductsPageCache | null => {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(PRODUCTS_PAGE_CACHE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as ProductsPageCache;
+    if (!parsed?.savedAt || Date.now() - parsed.savedAt > PRODUCTS_PAGE_CACHE_TTL_MS) {
+      window.sessionStorage.removeItem(PRODUCTS_PAGE_CACHE_KEY);
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const writeProductsPageCache = (products: Product[], categories: Category[]) => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.sessionStorage.setItem(
+      PRODUCTS_PAGE_CACHE_KEY,
+      JSON.stringify({
+        savedAt: Date.now(),
+        products,
+        categories,
+      } satisfies ProductsPageCache)
+    );
+  } catch {
+    // Ignore storage failures; the live response has already been applied.
+  }
+};
+
 const Products = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const initialCacheRef = useRef<ProductsPageCache | null>(readProductsPageCache());
+  const [products, setProducts] = useState<Product[]>(() => initialCacheRef.current?.products || []);
+  const [categories, setCategories] = useState<Category[]>(() => initialCacheRef.current?.categories || []);
+  const [isLoading, setIsLoading] = useState(() => !initialCacheRef.current);
   const [selectedCategory, setSelectedCategory] = useState<string | 'all'>(() => searchParams.get('category') || 'all');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | 'all'>(() => searchParams.get('subcategory') || 'all');
   const [highlightedProductId, setHighlightedProductId] = useState<number | null>(null);
@@ -85,28 +138,44 @@ const Products = () => {
     setSearchParams(new URLSearchParams(query), { replace: true });
   };
 
-  const loadData = async () => {
+  const syncProductsCache = (nextProducts: Product[], nextCategories: Category[] = categories) => {
+    writeProductsPageCache(nextProducts, nextCategories);
+  };
+
+  const updateProductsState = (updater: (current: Product[]) => Product[]) => {
+    setProducts((current) => {
+      const next = updater(current);
+      syncProductsCache(next);
+      return next;
+    });
+  };
+
+  const loadData = async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) {
+      setIsLoading(true);
+    }
+
     try {
       const [productsData, categoriesData] = await Promise.all([
-        apiGet<Product[] | { results?: Product[] }>('/products/?summary=1'),
+        apiGet<Product[] | { results?: Product[] }>('/products/?admin_summary=1'),
         apiGet<Category[] | { results?: Category[] }>('/categories/'),
       ]);
 
-      const normalizeList = <T,>(data: T[] | { results?: T[] }): T[] => {
-        if (Array.isArray(data)) return data;
-        if (Array.isArray((data as { results?: T[] }).results)) return (data as { results: T[] }).results;
-        return [];
-      };
+      const nextProducts = normalizeList(productsData);
+      const nextCategories = normalizeList(categoriesData);
 
-      setProducts(normalizeList(productsData));
-      setCategories(normalizeList(categoriesData));
+      setProducts(nextProducts);
+      setCategories(nextCategories);
+      writeProductsPageCache(nextProducts, nextCategories);
     } catch {
       toast.error('Failed to load products');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    void loadData({ silent: Boolean(initialCacheRef.current) });
   }, []);
 
   const handleDelete = async (id: number) => {
@@ -114,7 +183,7 @@ const Products = () => {
     try {
       await apiDelete(`/products/${id}/`);
       toast.success('Product deleted');
-      await loadData();
+      updateProductsState((current) => current.filter((product) => product.id !== id));
     } catch {
       toast.error('Delete failed');
     }
@@ -124,7 +193,16 @@ const Products = () => {
     try {
       await apiPatch(`/products/${product.id}/`, { is_hidden: !product.is_hidden });
       toast.success(product.is_hidden ? 'Product is now visible on the storefront' : 'Product hidden from the storefront');
-      await loadData();
+      updateProductsState((current) =>
+        current.map((item) =>
+          item.id === product.id
+            ? {
+                ...item,
+                is_hidden: !product.is_hidden,
+              }
+            : item
+        )
+      );
     } catch {
       toast.error('Failed to update product visibility');
     }
@@ -417,6 +495,13 @@ const Products = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {isLoading && products.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-6 text-center text-sm text-muted-foreground">
+                    Loading products...
+                  </TableCell>
+                </TableRow>
+              )}
               {filteredProducts.map((product) => {
                 const stockStatusMeta = getStockStatusMeta(normalizeProductStockStatus(product));
                 return (
@@ -487,7 +572,7 @@ const Products = () => {
                 </TableRow>
                 );
               })}
-              {filteredProducts.length === 0 && (
+              {!isLoading && filteredProducts.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-6">
                     No products found for the current search or filters.

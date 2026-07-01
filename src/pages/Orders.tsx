@@ -513,7 +513,7 @@ const Orders = () => {
 
   const loadProducts = async () => {
     try {
-      const data = await apiGet<Product[] | { results?: Product[] }>('/products/?summary=1');
+      const data = await apiGet<Product[] | { results?: Product[] }>('/products/?admin_summary=1');
       setProducts(normalizeList(data));
     } catch {
       toast.error('Failed to load products for manual orders');

@@ -1,6 +1,25 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ||
-  "https://reve-backend.onrender.com/api";
+const DEFAULT_API_BASE_URL = "https://reve-backend.onrender.com/api";
+
+const normalizeApiBaseUrl = (value?: string) => value?.trim().replace(/\/+$/, "");
+
+const resolveApiBaseUrl = () => {
+  const configuredApiBaseUrl = normalizeApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
+  const hostname = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+  const isHostedAdmin =
+    hostname === "reve-admin.vercel.app" || hostname === "www.reve-admin.vercel.app";
+  const pointsToLegacyKoyeb = (configuredApiBaseUrl || "").includes("koyeb.app");
+
+  if (isHostedAdmin && pointsToLegacyKoyeb) {
+    console.warn(
+      "Ignoring legacy Koyeb admin API configuration on the live admin domain and using Render instead."
+    );
+    return DEFAULT_API_BASE_URL;
+  }
+
+  return configuredApiBaseUrl || DEFAULT_API_BASE_URL;
+};
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 const getAuthToken = () => localStorage.getItem("admin_token");
 const mutationInFlight = new Map<string, Promise<unknown>>();
