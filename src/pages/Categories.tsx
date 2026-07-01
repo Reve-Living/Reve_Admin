@@ -128,7 +128,7 @@ const Categories = () => {
     try {
       const [categoriesRes, productsRes, filterTypesRes, catFiltersRes] = await Promise.all([
         apiGet<Category[]>('/categories/'),
-        apiGet<Product[]>('/products/'),
+        apiGet<Product[]>('/products/?admin_summary=1'),
         apiGet<FilterType[]>('/filter-types/'),
         apiGet<CategoryFilter[]>('/category-filters/'),
       ]);
