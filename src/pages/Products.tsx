@@ -98,13 +98,7 @@ const Products = () => {
         return [];
       };
 
-      const normalizedProducts = normalizeList(productsData).sort((a, b) => {
-        const aOrder = getDisplayOrder(a.sort_order);
-        const bOrder = getDisplayOrder(b.sort_order);
-        if (aOrder !== bOrder) return aOrder - bOrder;
-        return (b.id || 0) - (a.id || 0);
-      });
-      setProducts(normalizedProducts);
+      setProducts(normalizeList(productsData));
       setCategories(normalizeList(categoriesData));
     } catch {
       toast.error('Failed to load products');
@@ -168,6 +162,41 @@ const Products = () => {
     return categories.flatMap((category) => category.subcategories || []);
   }, [categories, selectedCategoryData]);
 
+  const categoryOrderLookup = useMemo(
+    () =>
+      new Map(
+        categories.map((category) => [
+          Number(category.id),
+          {
+            order: getDisplayOrder(category.sort_order),
+            name: (category.name || '').toLowerCase(),
+          },
+        ])
+      ),
+    [categories]
+  );
+
+  const subcategoryOrderLookup = useMemo(() => {
+    const map = new Map<
+      number,
+      {
+        order: number;
+        name: string;
+      }
+    >();
+
+    categories.forEach((category) => {
+      (category.subcategories || []).forEach((subcategory) => {
+        map.set(Number(subcategory.id), {
+          order: getDisplayOrder(subcategory.sort_order),
+          name: (subcategory.name || '').toLowerCase(),
+        });
+      });
+    });
+
+    return map;
+  }, [categories]);
+
   const filteredProducts = useMemo(() => {
     const targetCategory = selectedCategoryData;
     const targetSubcategory = availableSubcategories.find(
@@ -189,7 +218,8 @@ const Products = () => {
     const targetSubcategoryId = targetSubcategory?.id;
     const targetSubcategoryName = (targetSubcategory?.name || '').toLowerCase();
 
-    return products.filter((product) => {
+    return products
+      .filter((product) => {
       const productCategorySlug = (product.category_slug || '').toLowerCase();
       const productCategoryId = Number(product.category);
       const productCategoryName = (product.category_name || '').toLowerCase();
@@ -234,9 +264,45 @@ const Products = () => {
           .toLowerCase()
           .includes(normalizedSearch);
 
-      return matchesCategory && matchesSubcategory && matchesSearch;
-    });
-  }, [products, selectedCategoryData, availableSubcategories, selectedCategory, selectedSubcategory, productSearch]);
+        return matchesCategory && matchesSubcategory && matchesSearch;
+      })
+      .sort((a, b) => {
+        const aCategory = categoryOrderLookup.get(Number(a.category));
+        const bCategory = categoryOrderLookup.get(Number(b.category));
+        const aCategoryOrder = aCategory?.order ?? Number.MAX_SAFE_INTEGER;
+        const bCategoryOrder = bCategory?.order ?? Number.MAX_SAFE_INTEGER;
+        if (aCategoryOrder !== bCategoryOrder) return aCategoryOrder - bCategoryOrder;
+
+        const aCategoryName = aCategory?.name || (a.category_name || '').toLowerCase();
+        const bCategoryName = bCategory?.name || (b.category_name || '').toLowerCase();
+        if (aCategoryName !== bCategoryName) return aCategoryName.localeCompare(bCategoryName);
+
+        const aSubcategory = subcategoryOrderLookup.get(Number(a.subcategory));
+        const bSubcategory = subcategoryOrderLookup.get(Number(b.subcategory));
+        const aSubcategoryOrder = aSubcategory?.order ?? Number.MAX_SAFE_INTEGER;
+        const bSubcategoryOrder = bSubcategory?.order ?? Number.MAX_SAFE_INTEGER;
+        if (aSubcategoryOrder !== bSubcategoryOrder) return aSubcategoryOrder - bSubcategoryOrder;
+
+        const aSubcategoryName = aSubcategory?.name || (a.subcategory_name || '').toLowerCase();
+        const bSubcategoryName = bSubcategory?.name || (b.subcategory_name || '').toLowerCase();
+        if (aSubcategoryName !== bSubcategoryName) return aSubcategoryName.localeCompare(bSubcategoryName);
+
+        const aOrder = getDisplayOrder(a.sort_order);
+        const bOrder = getDisplayOrder(b.sort_order);
+        if (aOrder !== bOrder) return aOrder - bOrder;
+
+        return (b.id || 0) - (a.id || 0);
+      });
+  }, [
+    products,
+    selectedCategoryData,
+    availableSubcategories,
+    selectedCategory,
+    selectedSubcategory,
+    productSearch,
+    categoryOrderLookup,
+    subcategoryOrderLookup,
+  ]);
 
   const productFormSearch = useMemo(() => {
     return buildProductListQuery(selectedCategory, selectedSubcategory, productSearch);
