@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Edit, Trash2, Plus, X, ChevronDown, ChevronRight, FolderPlus, Filter, Eye, EyeOff } from 'lucide-react';
+import { Edit, Trash2, Plus, X, ChevronDown, ChevronRight, FolderPlus, Filter, Eye, EyeOff, ListOrdered } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiDelete, apiGet, apiPost, apiPut, apiUpload, apiPatch } from '../lib/api';
 import type { Category, Product, SubCategory, FilterType, CategoryFilter, FilterOption } from '../lib/types';
@@ -83,6 +83,9 @@ const Categories = () => {
   const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingFilter, setIsSavingFilter] = useState(false);
+  const [orderingCategoryFilter, setOrderingCategoryFilter] = useState<CategoryFilter | null>(null);
+  const [optionDisplayOrders, setOptionDisplayOrders] = useState<Record<number, number>>({});
+  const [isSavingOptionOrder, setIsSavingOptionOrder] = useState(false);
   const [promotingSubcategoryIds, setPromotingSubcategoryIds] = useState<Set<number>>(new Set());
 
   const [categoryName, setCategoryName] = useState('');
@@ -452,6 +455,48 @@ const Categories = () => {
       await loadData();
     } catch {
       toast.error('Failed to save category');
+    }
+  };
+
+  const getOptionsForCategoryFilter = (categoryFilter: CategoryFilter | null) => {
+    if (!categoryFilter) return [];
+    return filterTypes.find((filterType) => Number(filterType.id) === Number(categoryFilter.filter_type))?.options || [];
+  };
+
+  const openOptionOrderEditor = (categoryFilter: CategoryFilter) => {
+    const options = getOptionsForCategoryFilter(categoryFilter);
+    const savedOrder = Array.isArray(categoryFilter.option_order) ? categoryFilter.option_order.map(Number) : [];
+    const savedOrderLookup = new Map(savedOrder.map((optionId, index) => [optionId, index + 1]));
+    const initialOrders: Record<number, number> = {};
+    options.forEach((option, index) => {
+      initialOrders[option.id] = savedOrderLookup.get(option.id) ?? (Number(option.display_order) || index + 1);
+    });
+    setOptionDisplayOrders(initialOrders);
+    setOrderingCategoryFilter(categoryFilter);
+  };
+
+  const orderedOptionsForEditor = getOptionsForCategoryFilter(orderingCategoryFilter)
+    .map((option, index) => ({
+      option,
+      order: Number(optionDisplayOrders[option.id] ?? option.display_order ?? index + 1),
+      fallbackIndex: index,
+    }))
+    .sort((left, right) => left.order - right.order || left.fallbackIndex - right.fallbackIndex);
+
+  const handleSaveOptionOrder = async () => {
+    if (!orderingCategoryFilter) return;
+    try {
+      setIsSavingOptionOrder(true);
+      await apiPatch(`/category-filters/${orderingCategoryFilter.id}/`, {
+        option_order: orderedOptionsForEditor.map(({ option }) => option.id),
+      });
+      toast.success('Filter option order updated');
+      setOrderingCategoryFilter(null);
+      await loadData();
+    } catch {
+      toast.error('Failed to update filter option order');
+    } finally {
+      setIsSavingOptionOrder(false);
     }
   };
 
@@ -957,6 +1002,17 @@ const Categories = () => {
                           </button>
                           <button
                             type="button"
+                            className="text-muted-foreground hover:text-primary"
+                            title="Set option display order for this category"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openOptionOrderEditor(cf);
+                            }}
+                          >
+                            <ListOrdered className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleDeleteCategoryFilter(cf.id)}
                             className="text-destructive hover:opacity-80"
                             title="Remove"
@@ -1368,6 +1424,72 @@ const Categories = () => {
                 </Button>
                 <Button onClick={handleSaveFilter} disabled={isSavingFilter}>
                   {isSavingFilter ? 'Saving...' : 'Assign Filter'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {orderingCategoryFilter && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-xl max-h-[90vh] overflow-y-auto">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <CardTitle>Order Filter Options</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {getFilterTypeName(orderingCategoryFilter.filter_type, orderingCategoryFilter.filter_type_name)}
+                    {' for '}
+                    {orderingCategoryFilter.subcategory
+                      ? getSubcategoryName(orderingCategoryFilter.subcategory) || 'subcategory'
+                      : categories.find((category) => category.id === orderingCategoryFilter.category)?.name || 'category'}
+                  </p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setOrderingCategoryFilter(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Lower numbers appear first. This order applies only to this category or subcategory.
+              </p>
+              {orderedOptionsForEditor.length === 0 ? (
+                <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                  This filter has no options yet.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {orderedOptionsForEditor.map(({ option, order }) => (
+                    <div key={option.id} className="flex items-center gap-3 rounded-md border bg-white p-3">
+                      <Input
+                        type="number"
+                        min={0}
+                        className="w-24"
+                        value={order}
+                        onChange={(event) =>
+                          setOptionDisplayOrders((current) => ({
+                            ...current,
+                            [option.id]: Number(event.target.value) || 0,
+                          }))
+                        }
+                        aria-label={`${option.name} display order`}
+                      />
+                      <span className="font-medium">{option.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setOrderingCategoryFilter(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSaveOptionOrder}
+                  disabled={isSavingOptionOrder || orderedOptionsForEditor.length === 0}
+                >
+                  {isSavingOptionOrder ? 'Saving...' : 'Save Option Order'}
                 </Button>
               </div>
             </CardContent>

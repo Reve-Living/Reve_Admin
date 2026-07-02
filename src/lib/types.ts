@@ -404,6 +404,7 @@ export interface CategoryFilter {
   subcategory?: number;
   filter_type: number;
   display_order: number;
+  option_order?: number[];
   is_active: boolean;
   category_name?: string;
   subcategory_name?: string;
