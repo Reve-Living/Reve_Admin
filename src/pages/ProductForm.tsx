@@ -163,6 +163,7 @@ const productSchema = z.object({
           color_name: z.string().optional().nullable(),
           style_name: z.string().optional().nullable(),
           alt_text: z.string().optional().nullable(),
+          flip_horizontal: z.boolean().optional().nullable(),
           sort_order: z.number().optional().nullable(),
         })
       )
@@ -845,7 +846,7 @@ const ProductForm = () => {
   });
 
   const normalizeImageSortOrders = (
-    images: Array<{ url?: string | null; color_name?: string | null; style_name?: string | null; alt_text?: string | null; sort_order?: number | null }>
+    images: Array<{ url?: string | null; color_name?: string | null; style_name?: string | null; alt_text?: string | null; flip_horizontal?: boolean | null; sort_order?: number | null }>
   ) =>
     images.map((image, index) => ({
       ...image,
@@ -853,7 +854,7 @@ const ProductForm = () => {
     }));
 
   const replaceImageOrder = (
-    images: Array<{ url?: string | null; color_name?: string | null; style_name?: string | null; alt_text?: string | null; sort_order?: number | null }>
+    images: Array<{ url?: string | null; color_name?: string | null; style_name?: string | null; alt_text?: string | null; flip_horizontal?: boolean | null; sort_order?: number | null }>
   ) => {
     replaceImages(normalizeImageSortOrders(images));
   };
@@ -1150,6 +1151,7 @@ const ProductForm = () => {
             color_name: i.color_name || '',
             style_name: i.style_name || '',
             alt_text: i.alt_text || '',
+            flip_horizontal: Boolean(i.flip_horizontal),
             sort_order: Number(i.sort_order) || index + 1,
           }));
         const videos = product.videos.map((v) => ({ url: v.url }));
@@ -1707,6 +1709,7 @@ const ProductForm = () => {
           color_name: '',
           style_name: '',
           alt_text: '',
+          flip_horizontal: false,
           sort_order: imageFields.length + index + 1,
         })
       );
@@ -1788,6 +1791,7 @@ const ProductForm = () => {
             color_name: (img.color_name || '').trim(),
             style_name: (img.style_name || '').trim(),
             alt_text: (img.alt_text || '').trim(),
+            flip_horizontal: Boolean(img.flip_horizontal),
             sort_order: index + 1,
           }))
           .filter((img) => img.url.length > 0),
@@ -2260,6 +2264,7 @@ const ProductForm = () => {
                     color_name: '',
                     style_name: '',
                     alt_text: '',
+                    flip_horizontal: false,
                     sort_order: imageFields.length + 1,
                   })
                 }
@@ -2376,8 +2381,25 @@ const ProductForm = () => {
                     />
                   </div>
                   {watch(`images.${index}.url`) && (
-                    <img src={watch(`images.${index}.url`) || undefined} alt={`Preview ${index + 1}`} className="h-32 w-32 rounded-md border bg-black/5 object-cover" />
+                    <img
+                      src={watch(`images.${index}.url`) || undefined}
+                      alt={`Preview ${index + 1}`}
+                      className="h-32 w-32 rounded-md border bg-black/5 object-cover"
+                      style={{ transform: watch(`images.${index}.flip_horizontal`) ? 'scaleX(-1)' : undefined }}
+                    />
                   )}
+                  <label className="flex items-center gap-2 rounded-md border border-input bg-white px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(watch(`images.${index}.flip_horizontal`))}
+                      onChange={(e) => setValue(`images.${index}.flip_horizontal`, e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300"
+                    />
+                    Flip left/right on website
+                  </label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Mirrors this image horizontally only. The original image file and image order are not changed.
+                  </p>
                   <div className="grid gap-1">
                     <label className="text-xs text-muted-foreground">Image ALT text</label>
                     <Input

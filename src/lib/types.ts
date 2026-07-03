@@ -148,6 +148,7 @@ export interface ProductImage {
   color_name?: string;
   style_name?: string;
   alt_text?: string;
+  flip_horizontal?: boolean;
   sort_order?: number;
 }
 

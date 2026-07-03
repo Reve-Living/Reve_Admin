@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Edit, Trash2, Plus, X, ChevronDown, ChevronRight, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Edit, Trash2, Plus, X, ChevronDown, ChevronRight, ToggleLeft, ToggleRight, PackageCheck, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../lib/api';
-import type { Category, CategoryFilter, FilterType, SubCategory } from '../lib/types';
+import type { Category, CategoryFilter, FilterOption, FilterType, Product, SubCategory } from '../lib/types';
 
 const toSafeSlug = (value: string) =>
   value
@@ -17,6 +17,53 @@ const toSafeSlug = (value: string) =>
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
 
+const splitProductSearchTokens = (value: string) =>
+  String(value || '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+
+const buildProductInitials = (value: string) => splitProductSearchTokens(value).map((token) => token[0]).join('');
+
+const matchesInitialsQuery = (initials: string, query: string) => {
+  if (!initials || !query) return false;
+  if (initials.startsWith(query)) return true;
+
+  let queryIndex = 0;
+  for (const char of initials) {
+    if (char === query[queryIndex]) {
+      queryIndex += 1;
+      if (queryIndex === query.length) return true;
+    }
+  }
+
+  return false;
+};
+
+const matchesProductPickerSearch = (product: Product, rawQuery: string) => {
+  const query = String(rawQuery || '').trim().toLowerCase();
+  if (!query) return true;
+
+  const searchableText = [
+    product.name,
+    product.slug,
+    String(product.id || ''),
+    product.category_name,
+    product.subcategory_name,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return searchableText.includes(query) || matchesInitialsQuery(buildProductInitials(product.name), query);
+};
+
+type FilterOptionProductsResponse = {
+  filter_option: number;
+  assigned_product_ids: number[];
+  assigned_products?: Product[];
+};
+
 const Filters = () => {
   const subcategoryMatchesCategory = (subcategory: SubCategory, categoryId: number) =>
     Number(subcategory.category) === Number(categoryId) ||
@@ -26,10 +73,16 @@ const Filters = () => {
   const [categoryFilters, setCategoryFilters] = useState<CategoryFilter[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<SubCategory[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingType, setEditingType] = useState<FilterType | null>(null);
   const [expandedTypes, setExpandedTypes] = useState<Set<number>>(new Set());
   const [isUploading, setIsUploading] = useState(false);
+  const [assigningOption, setAssigningOption] = useState<(FilterOption & { typeName?: string }) | null>(null);
+  const [assignedProductIds, setAssignedProductIds] = useState<Set<number>>(new Set());
+  const [productSearch, setProductSearch] = useState('');
+  const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
+  const [isSavingAssignments, setIsSavingAssignments] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -221,6 +274,73 @@ const Filters = () => {
       loadData();
     } catch {
       toast.error('Failed to delete filter option');
+    }
+  };
+
+  const openProductAssignmentModal = async (typeName: string, option: FilterOption) => {
+    setAssigningOption({ ...option, typeName });
+    setAssignedProductIds(new Set());
+    setProductSearch('');
+    setIsLoadingAssignments(true);
+    try {
+      const [response, productList] = await Promise.all([
+        apiGet<FilterOptionProductsResponse>(`/filter-options/${option.id}/products/`),
+        products.length > 0 ? Promise.resolve(products) : apiGet<Product[]>('/products/?admin_summary=1'),
+      ]);
+      setProducts(productList);
+      setAssignedProductIds(new Set((response.assigned_product_ids || []).map(Number)));
+    } catch {
+      toast.error('Failed to load assigned products');
+      setAssigningOption(null);
+    } finally {
+      setIsLoadingAssignments(false);
+    }
+  };
+
+  const toggleAssignedProduct = (productId: number) => {
+    setAssignedProductIds((current) => {
+      const next = new Set(current);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      return next;
+    });
+  };
+
+  const filteredProductsForAssignment = useMemo(
+    () => products.filter((product) => matchesProductPickerSearch(product, productSearch)),
+    [productSearch, products]
+  );
+
+  const suggestedProductsForAssignment = useMemo(() => {
+    if (!assigningOption) return [];
+    const assigned = products.filter((product) => assignedProductIds.has(Number(product.id)));
+    if (assigned.length > 0) return assigned.slice(0, 12);
+    return products
+      .filter((product) => {
+        const optionName = assigningOption.name.toLowerCase();
+        const text = `${product.name} ${product.category_name || ''} ${product.subcategory_name || ''}`.toLowerCase();
+        return optionName
+          .split(/\s+/)
+          .filter(Boolean)
+          .some((token) => text.includes(token));
+      })
+      .slice(0, 12);
+  }, [assignedProductIds, assigningOption, products]);
+
+  const handleSaveProductAssignments = async () => {
+    if (!assigningOption) return;
+    try {
+      setIsSavingAssignments(true);
+      await apiPatch(`/filter-options/${assigningOption.id}/products/`, {
+        product_ids: Array.from(assignedProductIds),
+      });
+      toast.success('Filter option products updated');
+      setAssigningOption(null);
+      await loadData();
+    } catch {
+      toast.error('Failed to save product assignments');
+    } finally {
+      setIsSavingAssignments(false);
     }
   };
 
@@ -422,13 +542,23 @@ const Filters = () => {
                               </Button>
                             </>
                           ) : (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => startEditingOption(type.id, option)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openProductAssignmentModal(type.name, option)}
+                                title="Assign products to this filter option"
+                              >
+                                <PackageCheck className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => startEditingOption(type.id, option)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </>
                           )}
                           <Button
                             variant="ghost"
@@ -744,6 +874,116 @@ const Filters = () => {
                   className="flex-1"
                 >
                   Cancel
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {assigningOption && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <CardTitle>Assign Products</CardTitle>
+                  <p className="text-sm text-gray-600">
+                    {assigningOption.typeName} / {assigningOption.name}
+                  </p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setAssigningOption(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Search products</label>
+                <Input
+                  value={productSearch}
+                  onChange={(event) => setProductSearch(event.target.value)}
+                  placeholder="Search by name, initials, slug, category, or ID"
+                />
+              </div>
+
+              {suggestedProductsForAssignment.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Suggested / selected products</p>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedProductsForAssignment.map((product) => (
+                      <button
+                        key={product.id}
+                        type="button"
+                        onClick={() => toggleAssignedProduct(product.id)}
+                        className={`rounded-full border px-3 py-1 text-sm ${
+                          assignedProductIds.has(product.id)
+                            ? 'border-green-500 bg-green-50 text-green-700'
+                            : 'border-border bg-white text-foreground'
+                        }`}
+                      >
+                        {assignedProductIds.has(product.id) && <Check className="mr-1 inline h-3 w-3" />}
+                        {product.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-md border bg-white">
+                <div className="flex items-center justify-between border-b px-3 py-2">
+                  <p className="text-sm font-medium">Products</p>
+                  <p className="text-xs text-gray-500">{assignedProductIds.size} selected</p>
+                </div>
+                <div className="max-h-96 overflow-y-auto p-2">
+                  {isLoadingAssignments ? (
+                    <p className="p-3 text-sm text-gray-600">Loading assigned products...</p>
+                  ) : filteredProductsForAssignment.length === 0 ? (
+                    <p className="p-3 text-sm text-gray-600">No products match that search.</p>
+                  ) : (
+                    filteredProductsForAssignment.map((product) => {
+                      const checked = assignedProductIds.has(Number(product.id));
+                      return (
+                        <label
+                          key={product.id}
+                          className="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-gray-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleAssignedProduct(product.id)}
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <span className="flex-1 text-sm">
+                            <span className="font-medium">{product.name}</span>
+                            <span className="ml-2 text-xs text-gray-500">
+                              {product.category_name || 'No category'}
+                              {product.subcategory_name ? ` / ${product.subcategory_name}` : ''}
+                              {product.is_hidden ? ' / hidden' : ''}
+                            </span>
+                          </span>
+                          {checked && (
+                            <span className="inline-flex items-center gap-1 text-sm font-semibold text-green-600">
+                              <Check className="h-4 w-4" /> Added
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500">
+                Saving here only changes this filter option's product assignments. Product prices, images, and display order are not changed.
+              </p>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setAssigningOption(null)} disabled={isSavingAssignments}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveProductAssignments} disabled={isSavingAssignments || isLoadingAssignments}>
+                  {isSavingAssignments ? 'Saving...' : 'Save Product Assignments'}
                 </Button>
               </div>
             </CardContent>
