@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Edit, Trash2, Plus, X, ChevronDown, ChevronRight, FolderPlus, Filter, Eye, EyeOff, ListOrdered } from 'lucide-react';
+import { Edit, Trash2, Plus, X, ChevronDown, ChevronRight, FolderPlus, Filter, Eye, EyeOff, ListOrdered, PackageCheck, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiDelete, apiGet, apiPost, apiPut, apiUpload, apiPatch } from '../lib/api';
 import type { Category, Product, SubCategory, FilterType, CategoryFilter, FilterOption } from '../lib/types';
@@ -64,6 +64,12 @@ const matchesProductPickerSearch = (product: Product, rawQuery: string) => {
   return searchableText.includes(query) || matchesInitialsQuery(buildProductInitials(product.name), query);
 };
 
+type FilterOptionProductsResponse = {
+  filter_option: number;
+  assigned_product_ids: number[];
+  assigned_products?: Product[];
+};
+
 const Categories = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -84,6 +90,12 @@ const Categories = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingFilter, setIsSavingFilter] = useState(false);
   const [orderingCategoryFilter, setOrderingCategoryFilter] = useState<CategoryFilter | null>(null);
+  const [productAssignmentFilter, setProductAssignmentFilter] = useState<CategoryFilter | null>(null);
+  const [assigningOption, setAssigningOption] = useState<(FilterOption & { typeName?: string }) | null>(null);
+  const [assignedProductIds, setAssignedProductIds] = useState<Set<number>>(new Set());
+  const [productSearch, setProductSearch] = useState('');
+  const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
+  const [isSavingAssignments, setIsSavingAssignments] = useState(false);
   const [optionDisplayOrders, setOptionDisplayOrders] = useState<Record<number, number>>({});
   const [isSavingOptionOrder, setIsSavingOptionOrder] = useState(false);
   const [promotingSubcategoryIds, setPromotingSubcategoryIds] = useState<Set<number>>(new Set());
@@ -497,6 +509,73 @@ const Categories = () => {
       toast.error('Failed to update filter option order');
     } finally {
       setIsSavingOptionOrder(false);
+    }
+  };
+
+  const openProductAssignmentModal = async (typeName: string, option: FilterOption) => {
+    setAssigningOption({ ...option, typeName });
+    setAssignedProductIds(new Set());
+    setProductSearch('');
+    setIsLoadingAssignments(true);
+    try {
+      const [response, productList] = await Promise.all([
+        apiGet<FilterOptionProductsResponse>(`/filter-options/${option.id}/products/`),
+        products.length > 0 ? Promise.resolve(products) : apiGet<Product[]>('/products/?admin_summary=1'),
+      ]);
+      setProducts(productList);
+      setAssignedProductIds(new Set((response.assigned_product_ids || []).map(Number)));
+    } catch {
+      toast.error('Failed to load assigned products');
+      setAssigningOption(null);
+    } finally {
+      setIsLoadingAssignments(false);
+    }
+  };
+
+  const toggleAssignedProduct = (productId: number) => {
+    setAssignedProductIds((current) => {
+      const next = new Set(current);
+      if (next.has(productId)) next.delete(productId);
+      else next.add(productId);
+      return next;
+    });
+  };
+
+  const filteredProductsForAssignment = useMemo(
+    () => products.filter((product) => matchesProductPickerSearch(product, productSearch)),
+    [productSearch, products]
+  );
+
+  const suggestedProductsForAssignment = useMemo(() => {
+    if (!assigningOption) return [];
+    const assigned = products.filter((product) => assignedProductIds.has(Number(product.id)));
+    if (assigned.length > 0) return assigned.slice(0, 12);
+    return products
+      .filter((product) => {
+        const optionName = assigningOption.name.toLowerCase();
+        const text = `${product.name} ${product.category_name || ''} ${product.subcategory_name || ''}`.toLowerCase();
+        return optionName
+          .split(/\s+/)
+          .filter(Boolean)
+          .some((token) => text.includes(token));
+      })
+      .slice(0, 12);
+  }, [assignedProductIds, assigningOption, products]);
+
+  const handleSaveProductAssignments = async () => {
+    if (!assigningOption) return;
+    try {
+      setIsSavingAssignments(true);
+      await apiPatch(`/filter-options/${assigningOption.id}/products/`, {
+        product_ids: Array.from(assignedProductIds),
+      });
+      toast.success('Filter option products updated');
+      setAssigningOption(null);
+      await loadData();
+    } catch {
+      toast.error('Failed to save product assignments');
+    } finally {
+      setIsSavingAssignments(false);
     }
   };
 
@@ -1013,6 +1092,17 @@ const Categories = () => {
                           </button>
                           <button
                             type="button"
+                            className="text-muted-foreground hover:text-primary"
+                            title="Assign products to this filter's options"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProductAssignmentFilter(cf);
+                            }}
+                          >
+                            <PackageCheck className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => handleDeleteCategoryFilter(cf.id)}
                             className="text-destructive hover:opacity-80"
                             title="Remove"
@@ -1490,6 +1580,175 @@ const Categories = () => {
                   disabled={isSavingOptionOrder || orderedOptionsForEditor.length === 0}
                 >
                   {isSavingOptionOrder ? 'Saving...' : 'Save Option Order'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {productAssignmentFilter && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-xl max-h-[90vh] overflow-y-auto">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <CardTitle>Assign Products to Filter Options</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {getFilterTypeName(productAssignmentFilter.filter_type, productAssignmentFilter.filter_type_name)}
+                    {' for '}
+                    {productAssignmentFilter.subcategory
+                      ? getSubcategoryName(productAssignmentFilter.subcategory) || 'subcategory'
+                      : categories.find((category) => category.id === productAssignmentFilter.category)?.name || 'category'}
+                  </p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setProductAssignmentFilter(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Pick an option, then select which products belong to that option. This does not edit product prices, images, or display order.
+              </p>
+              {getOptionsForCategoryFilter(productAssignmentFilter).length === 0 ? (
+                <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                  This filter has no options yet.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {getOptionsForCategoryFilter(productAssignmentFilter).map((option) => (
+                    <div key={option.id} className="flex items-center justify-between gap-3 rounded-md border bg-white p-3">
+                      <div className="min-w-0">
+                        <p className="font-medium">{option.name}</p>
+                        <p className="text-xs text-muted-foreground">{option.slug}</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const typeName = getFilterTypeName(
+                            productAssignmentFilter.filter_type,
+                            productAssignmentFilter.filter_type_name
+                          );
+                          setProductAssignmentFilter(null);
+                          openProductAssignmentModal(typeName, option);
+                        }}
+                      >
+                        <PackageCheck className="mr-2 h-4 w-4" /> Assign Products
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {assigningOption && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <CardTitle>Assign Products</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {assigningOption.typeName} / {assigningOption.name}
+                  </p>
+                </div>
+                <Button variant="ghost" size="icon" onClick={() => setAssigningOption(null)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Search products</label>
+                <Input
+                  value={productSearch}
+                  onChange={(event) => setProductSearch(event.target.value)}
+                  placeholder="Search by name, initials, slug, category, or ID"
+                />
+              </div>
+
+              {suggestedProductsForAssignment.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Suggested / selected products</p>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedProductsForAssignment.map((product) => (
+                      <button
+                        key={product.id}
+                        type="button"
+                        onClick={() => toggleAssignedProduct(product.id)}
+                        className={`rounded-full border px-3 py-1 text-sm ${
+                          assignedProductIds.has(product.id)
+                            ? 'border-green-500 bg-green-50 text-green-700'
+                            : 'border-border bg-white text-foreground'
+                        }`}
+                      >
+                        {assignedProductIds.has(product.id) && <Check className="mr-1 inline h-3 w-3" />}
+                        {product.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-md border bg-white">
+                <div className="flex items-center justify-between border-b px-3 py-2">
+                  <p className="text-sm font-medium">Products</p>
+                  <p className="text-xs text-muted-foreground">{assignedProductIds.size} selected</p>
+                </div>
+                <div className="max-h-96 overflow-y-auto p-2">
+                  {isLoadingAssignments ? (
+                    <p className="p-3 text-sm text-muted-foreground">Loading assigned products...</p>
+                  ) : filteredProductsForAssignment.length === 0 ? (
+                    <p className="p-3 text-sm text-muted-foreground">No products match that search.</p>
+                  ) : (
+                    filteredProductsForAssignment.map((product) => {
+                      const checked = assignedProductIds.has(Number(product.id));
+                      return (
+                        <label
+                          key={product.id}
+                          className="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-gray-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleAssignedProduct(product.id)}
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <span className="flex-1 text-sm">
+                            <span className="font-medium">{product.name}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {product.category_name || 'No category'}
+                              {product.subcategory_name ? ` / ${product.subcategory_name}` : ''}
+                              {product.is_hidden ? ' / hidden' : ''}
+                            </span>
+                          </span>
+                          {checked && (
+                            <span className="inline-flex items-center gap-1 text-sm font-semibold text-green-600">
+                              <Check className="h-4 w-4" /> Added
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Saving here only changes this filter option's product assignments. Product prices, images, and display order are not changed.
+              </p>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setAssigningOption(null)} disabled={isSavingAssignments}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveProductAssignments} disabled={isSavingAssignments || isLoadingAssignments}>
+                  {isSavingAssignments ? 'Saving...' : 'Save Product Assignments'}
                 </Button>
               </div>
             </CardContent>
