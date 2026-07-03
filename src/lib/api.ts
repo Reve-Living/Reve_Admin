@@ -47,6 +47,12 @@ const cloneData = <T>(data: T): T => {
 
 const getCacheTtlMs = (path: string) => {
   if (
+    path.startsWith("/products/?admin_picker=1") ||
+    path.startsWith("/products/?admin_summary=1")
+  ) {
+    return LONG_GET_CACHE_TTL_MS;
+  }
+  if (
     path.startsWith("/categories/") ||
     path === "/categories/" ||
     path.startsWith("/subcategories/") ||

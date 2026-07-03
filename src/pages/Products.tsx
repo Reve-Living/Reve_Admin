@@ -56,6 +56,13 @@ const normalizeList = <T,>(data: T[] | { results?: T[] }): T[] => {
   return [];
 };
 
+const buildAdminProductsPath = (category: string | 'all', subcategory: string | 'all') => {
+  const params = new URLSearchParams({ admin_summary: '1' });
+  if (category !== 'all') params.set('category', category);
+  if (subcategory !== 'all') params.set('subcategory', subcategory);
+  return `/products/?${params.toString()}`;
+};
+
 const Products = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -100,7 +107,7 @@ const Products = () => {
     setIsLoading(true);
     try {
       const [productsData, categoriesData] = await Promise.all([
-        apiGet<Product[] | { results?: Product[] }>('/products/?admin_summary=1'),
+        apiGet<Product[] | { results?: Product[] }>(buildAdminProductsPath(selectedCategory, selectedSubcategory)),
         apiGet<Category[] | { results?: Category[] }>('/categories/'),
       ]);
 
@@ -118,7 +125,7 @@ const Products = () => {
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [selectedCategory, selectedSubcategory]);
 
   const handleDelete = async (id: number) => {
     if (!confirm('Delete this product?')) return;

@@ -40,7 +40,7 @@ const Reviews = () => {
     try {
       const [reviewsRes, productsRes] = await Promise.all([
         apiGet<Review[]>("/reviews/"),
-        apiGet<Product[]>("/products/?admin_summary=1"),
+        apiGet<Product[]>("/products/?admin_picker=1"),
       ]);
       setReviews(reviewsRes);
       setProducts(productsRes);

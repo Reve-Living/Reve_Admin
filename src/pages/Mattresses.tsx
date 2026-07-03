@@ -233,7 +233,7 @@ const Mattresses = () => {
         setSubcategories(list);
       })
       .catch(() => setSubcategories([]));
-    apiGet<Product[]>("/products/?admin_summary=1")
+    apiGet<Product[]>("/products/?admin_picker=1")
       .then((res) => {
         const list = Array.isArray(res) ? res : [];
         setAllProducts(list);

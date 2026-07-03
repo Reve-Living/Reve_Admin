@@ -143,7 +143,7 @@ const Categories = () => {
     try {
       const [categoriesRes, productsRes, filterTypesRes, catFiltersRes] = await Promise.all([
         apiGet<Category[]>('/categories/'),
-        apiGet<Product[]>('/products/?admin_summary=1'),
+        apiGet<Product[]>('/products/?admin_picker=1'),
         apiGet<FilterType[]>('/filter-types/'),
         apiGet<CategoryFilter[]>('/category-filters/'),
       ]);
@@ -520,7 +520,7 @@ const Categories = () => {
     try {
       const [response, productList] = await Promise.all([
         apiGet<FilterOptionProductsResponse>(`/filter-options/${option.id}/products/`),
-        products.length > 0 ? Promise.resolve(products) : apiGet<Product[]>('/products/?admin_summary=1'),
+        products.length > 0 ? Promise.resolve(products) : apiGet<Product[]>('/products/?admin_picker=1'),
       ]);
       setProducts(productList);
       setAssignedProductIds(new Set((response.assigned_product_ids || []).map(Number)));

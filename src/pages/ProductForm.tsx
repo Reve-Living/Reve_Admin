@@ -952,16 +952,19 @@ const ProductForm = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const [cats, subs, products, filters, options, mattresses] = await Promise.all([
+        const [cats, subs] = await Promise.all([
           apiGet<Category[]>('/categories/'),
           apiGet<SubCategory[]>('/subcategories/'),
-          apiGet<Product[]>('/products/?admin_summary=1'),
+        ]);
+        setCategories(cats);
+        setSubcategories(subs);
+
+        const [products, filters, options, mattresses] = await Promise.all([
+          apiGet<Product[]>('/products/?admin_picker=1'),
           apiGet<FilterType[]>('/filter-types/'),
           apiGet<FilterOption[]>('/filter-options/'),
           apiGet<ProductMattress[]>('/mattress-options/'),
         ]);
-        setCategories(cats);
-        setSubcategories(subs);
         setImportProductOptions(Array.isArray(products) ? products : []);
         setFilterTypes((filters || []).filter((ft) => ft.is_active !== false));
         const activeOptions = (options || []).filter((opt) => opt.is_active !== false);
