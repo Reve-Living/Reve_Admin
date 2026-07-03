@@ -23,6 +23,47 @@ const API_BASE_URL = resolveApiBaseUrl();
 
 const getAuthToken = () => localStorage.getItem("admin_token");
 const mutationInFlight = new Map<string, Promise<unknown>>();
+const getCache = new Map<string, { ts: number; data: unknown }>();
+const getInFlight = new Map<string, Promise<unknown>>();
+const GET_CACHE_TTL_MS = 15 * 1000;
+const LONG_GET_CACHE_TTL_MS = 60 * 1000;
+
+const normalizeGetCacheKey = (path: string) => {
+  const [pathname, query = ""] = path.split("?");
+  if (!query) return pathname;
+  const params = new URLSearchParams(query);
+  params.sort();
+  const normalizedQuery = params.toString();
+  return normalizedQuery ? `${pathname}?${normalizedQuery}` : pathname;
+};
+
+const cloneData = <T>(data: T): T => {
+  try {
+    return structuredClone(data);
+  } catch {
+    return JSON.parse(JSON.stringify(data));
+  }
+};
+
+const getCacheTtlMs = (path: string) => {
+  if (
+    path.startsWith("/categories/") ||
+    path === "/categories/" ||
+    path.startsWith("/subcategories/") ||
+    path === "/subcategories/" ||
+    path.startsWith("/filter-types/") ||
+    path === "/filter-types/" ||
+    path.startsWith("/filter-options/") ||
+    path === "/filter-options/" ||
+    path.startsWith("/category-filters/") ||
+    path === "/category-filters/" ||
+    path.startsWith("/mattress-options/") ||
+    path === "/mattress-options/"
+  ) {
+    return LONG_GET_CACHE_TTL_MS;
+  }
+  return GET_CACHE_TTL_MS;
+};
 
 const getMutationKey = (method: string, path: string, body?: unknown) =>
   `${method}:${path}:${body === undefined ? "" : JSON.stringify(body)}`;
@@ -66,6 +107,8 @@ const runMutation = async <T>(
     })
     .finally(() => {
       mutationInFlight.delete(key);
+      getCache.clear();
+      getInFlight.clear();
     });
 
   mutationInFlight.set(key, request);
@@ -73,14 +116,36 @@ const runMutation = async <T>(
 };
 
 export const apiGet = async <T>(path: string): Promise<T> => {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const cacheKey = normalizeGetCacheKey(path);
+  const now = Date.now();
+  const cached = getCache.get(cacheKey);
+  if (cached && now - cached.ts < getCacheTtlMs(path)) {
+    return cloneData(cached.data) as T;
+  }
+
+  const existing = getInFlight.get(cacheKey);
+  if (existing) {
+    return cloneData((await existing) as T);
+  }
+
+  const request = fetch(`${API_BASE_URL}${path}`, {
     headers: buildHeaders(false),
     cache: "no-store",
-  });
-  if (!res.ok) {
-    throw new Error(await res.text());
-  }
-  return res.json();
+  })
+    .then(async (res) => {
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const data = (await res.json()) as T;
+      getCache.set(cacheKey, { ts: Date.now(), data });
+      return data;
+    })
+    .finally(() => {
+      getInFlight.delete(cacheKey);
+    });
+
+  getInFlight.set(cacheKey, request);
+  return cloneData(await request);
 };
 
 export const apiPost = async <T>(path: string, body: unknown): Promise<T> => {

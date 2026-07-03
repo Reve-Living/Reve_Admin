@@ -613,6 +613,8 @@ const ProductForm = () => {
   const [mattressLibrary, setMattressLibrary] = useState<ProductMattress[]>([]);
   const [loadedProductMattresses, setLoadedProductMattresses] = useState<ProductMattress[]>([]);
   const [filterOptions, setFilterOptions] = useState<FilterOption[]>([]);
+  const [allFilterOptions, setAllFilterOptions] = useState<FilterOption[]>([]);
+  const [filterTypes, setFilterTypes] = useState<FilterType[]>([]);
   const [categoryFilterOptions, setCategoryFilterOptions] = useState<FilterOption[]>([]);
   const [dimensionColumns, setDimensionColumns] = useState<string[]>(() => [...DIMENSION_SIZE_COLUMNS]);
   const [loadedProductCategory, setLoadedProductCategory] = useState<number | null>(null);
@@ -950,7 +952,7 @@ const ProductForm = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const [cats, subs, products, _filters, options, mattresses] = await Promise.all([
+        const [cats, subs, products, filters, options, mattresses] = await Promise.all([
           apiGet<Category[]>('/categories/'),
           apiGet<SubCategory[]>('/subcategories/'),
           apiGet<Product[]>('/products/?admin_summary=1'),
@@ -961,7 +963,10 @@ const ProductForm = () => {
         setCategories(cats);
         setSubcategories(subs);
         setImportProductOptions(Array.isArray(products) ? products : []);
-        setFilterOptions((options || []).filter((opt) => opt.is_active !== false));
+        setFilterTypes((filters || []).filter((ft) => ft.is_active !== false));
+        const activeOptions = (options || []).filter((opt) => opt.is_active !== false);
+        setAllFilterOptions(activeOptions);
+        setFilterOptions(activeOptions);
         setMattressLibrary(Array.isArray(mattresses) ? mattresses : []);
       } catch {
         toast.error('Failed to load categories');
@@ -1034,13 +1039,8 @@ const ProductForm = () => {
       }
 
       try {
-        const [categoryAssignments, typesRes, optsRes] = await Promise.all([
-          apiGet<CategoryFilter[]>(filterQuery),
-          apiGet<FilterType[]>('/filter-types/'),
-          apiGet<FilterOption[]>('/filter-options/'),
-        ]);
-
-        const activeTypes = (typesRes || []).filter((ft) => ft.is_active !== false);
+        const categoryAssignments = await apiGet<CategoryFilter[]>(filterQuery);
+        const activeTypes = filterTypes.filter((ft) => ft.is_active !== false);
         const activeTypeIds = new Set(activeTypes.map((ft) => ft.id));
         const assignedTypeIds = new Set(
           (categoryAssignments || [])
@@ -1050,7 +1050,7 @@ const ProductForm = () => {
         );
 
         setFilterOptions(
-          (optsRes || []).filter(
+          allFilterOptions.filter(
             (opt) => opt.is_active !== false && (!opt.filter_type || activeTypeIds.has(opt.filter_type))
           )
         );
@@ -1073,7 +1073,7 @@ const ProductForm = () => {
       }
     };
     loadCategoryFilters();
-  }, [selectedCategory, selectedSubcategory, subcategories]);
+  }, [selectedCategory, selectedSubcategory, subcategories, filterTypes, allFilterOptions]);
 
   useEffect(() => {
     const loadLibrary = async () => {
