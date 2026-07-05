@@ -109,6 +109,8 @@ const Categories = () => {
   const [categoryImageAltText, setCategoryImageAltText] = useState('');
   const [categorySortOrder, setCategorySortOrder] = useState(0);
   const [categoryHidden, setCategoryHidden] = useState(false);
+  const [categoryDiscountOverrideEnabled, setCategoryDiscountOverrideEnabled] = useState(false);
+  const [categoryDiscountPercentage, setCategoryDiscountPercentage] = useState(0);
   const [subCategoryProductSearch, setSubCategoryProductSearch] = useState('');
   const [subCategoryFormData, setSubCategoryFormData] = useState({
     name: '',
@@ -120,6 +122,8 @@ const Categories = () => {
     metaTitle: '',
     metaDescription: '',
     sort_order: 0,
+    discountOverrideEnabled: false,
+    discountPercentage: 0,
     linkedCategoryIds: [] as number[],
     selectedProducts: [] as number[],
   });
@@ -209,6 +213,8 @@ const Categories = () => {
       setCategoryImageAltText(category.image_alt_text || '');
       setCategorySortOrder(Number(category.sort_order) || 0);
       setCategoryHidden(Boolean(category.is_hidden));
+      setCategoryDiscountOverrideEnabled(Boolean(category.discount_override_enabled));
+      setCategoryDiscountPercentage(Number(category.discount_percentage) || 0);
     } else {
       setEditingCategory(null);
       setCategoryName('');
@@ -220,6 +226,8 @@ const Categories = () => {
       setCategoryImageAltText('');
       setCategorySortOrder(0);
       setCategoryHidden(false);
+      setCategoryDiscountOverrideEnabled(false);
+      setCategoryDiscountPercentage(0);
     }
     setShowCategoryModal(true);
   };
@@ -239,6 +247,8 @@ const Categories = () => {
         metaTitle: subCategory.meta_title || '',
         metaDescription: subCategory.meta_description || '',
         sort_order: Number(subCategory.sort_order) || 0,
+        discountOverrideEnabled: Boolean(subCategory.discount_override_enabled),
+        discountPercentage: Number(subCategory.discount_percentage) || 0,
         linkedCategoryIds: getLinkedCategoryIds(subCategory).filter((id) => id !== Number(subCategory.category)),
         selectedProducts: products
           .filter((p) => p.subcategory === subCategory.id)
@@ -257,6 +267,8 @@ const Categories = () => {
         metaTitle: '',
         metaDescription: '',
         sort_order: 0,
+        discountOverrideEnabled: false,
+        discountPercentage: 0,
         linkedCategoryIds: [],
         selectedProducts: [],
       });
@@ -438,6 +450,10 @@ const Categories = () => {
           image_alt_text: categoryImageAltText.trim(),
           sort_order: Number.isFinite(categorySortOrder) ? categorySortOrder : 0,
           is_hidden: categoryHidden,
+          discount_override_enabled: categoryDiscountOverrideEnabled,
+          discount_percentage: categoryDiscountOverrideEnabled
+            ? Math.min(Math.max(Math.round(Number(categoryDiscountPercentage) || 0), 0), 100)
+            : 0,
         });
         toast.success('Category updated successfully');
       } else {
@@ -451,6 +467,10 @@ const Categories = () => {
           image_alt_text: categoryImageAltText.trim(),
           sort_order: Number.isFinite(categorySortOrder) ? categorySortOrder : 0,
           is_hidden: categoryHidden,
+          discount_override_enabled: categoryDiscountOverrideEnabled,
+          discount_percentage: categoryDiscountOverrideEnabled
+            ? Math.min(Math.max(Math.round(Number(categoryDiscountPercentage) || 0), 0), 100)
+            : 0,
         });
         toast.success('Category created successfully');
       }
@@ -464,6 +484,8 @@ const Categories = () => {
       setCategoryImageAltText('');
       setCategorySortOrder(0);
       setCategoryHidden(false);
+      setCategoryDiscountOverrideEnabled(false);
+      setCategoryDiscountPercentage(0);
       await loadData();
     } catch {
       toast.error('Failed to save category');
@@ -609,6 +631,10 @@ const Categories = () => {
           meta_description: subCategoryFormData.metaDescription.trim(),
           sort_order: Number.isFinite(subCategoryFormData.sort_order) ? subCategoryFormData.sort_order : 0,
           is_hidden: subCategoryFormData.isHidden,
+          discount_override_enabled: subCategoryFormData.discountOverrideEnabled,
+          discount_percentage: subCategoryFormData.discountOverrideEnabled
+            ? Math.min(Math.max(Math.round(Number(subCategoryFormData.discountPercentage) || 0), 0), 100)
+            : 0,
           category: selectedCategoryId,
           additional_categories: subCategoryFormData.linkedCategoryIds.filter((id) => id !== selectedCategoryId),
         });
@@ -624,6 +650,10 @@ const Categories = () => {
           meta_description: subCategoryFormData.metaDescription.trim(),
           sort_order: Number.isFinite(subCategoryFormData.sort_order) ? subCategoryFormData.sort_order : 0,
           is_hidden: subCategoryFormData.isHidden,
+          discount_override_enabled: subCategoryFormData.discountOverrideEnabled,
+          discount_percentage: subCategoryFormData.discountOverrideEnabled
+            ? Math.min(Math.max(Math.round(Number(subCategoryFormData.discountPercentage) || 0), 0), 100)
+            : 0,
           category: selectedCategoryId,
           additional_categories: subCategoryFormData.linkedCategoryIds.filter((id) => id !== selectedCategoryId),
         });
@@ -1337,6 +1367,33 @@ const Categories = () => {
                 Hide from storefront
               </label>
 
+              <div className="rounded-md border border-input bg-muted/20 p-3 space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={categoryDiscountOverrideEnabled}
+                    onChange={(e) => setCategoryDiscountOverrideEnabled(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  Override product discounts for this category
+                </label>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Category Discount (%)</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={categoryDiscountPercentage}
+                    disabled={!categoryDiscountOverrideEnabled}
+                    onChange={(e) => setCategoryDiscountPercentage(Number(e.target.value))}
+                    placeholder="0"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  When checked, the storefront shows this discount for products in this category. Product form discounts are not overwritten.
+                </p>
+              </div>
+
               <div className="flex justify-end gap-2 pt-4">
                 <Button variant="outline" onClick={() => setShowCategoryModal(false)}>Cancel</Button>
                 <Button onClick={handleSaveCategory}>
@@ -1886,6 +1943,43 @@ const Categories = () => {
                 />
                 Hide from storefront
               </label>
+
+              <div className="rounded-md border border-input bg-muted/20 p-3 space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    checked={subCategoryFormData.discountOverrideEnabled}
+                    onChange={(e) =>
+                      setSubCategoryFormData({
+                        ...subCategoryFormData,
+                        discountOverrideEnabled: e.target.checked,
+                      })
+                    }
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  Override product discounts for this subcategory
+                </label>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium">Subcategory Discount (%)</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={subCategoryFormData.discountPercentage}
+                    disabled={!subCategoryFormData.discountOverrideEnabled}
+                    onChange={(e) =>
+                      setSubCategoryFormData({
+                        ...subCategoryFormData,
+                        discountPercentage: Number(e.target.value),
+                      })
+                    }
+                    placeholder="0"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  When checked, this subcategory discount is shown on the storefront. Product form discounts are not overwritten.
+                </p>
+              </div>
 
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Subcategory Image</label>

@@ -11,6 +11,8 @@ export interface Category {
   meta_title?: string;
   meta_description?: string;
   sort_order?: number;
+  discount_override_enabled?: boolean;
+  discount_percentage?: number;
   subcategories?: SubCategory[];
 }
 
@@ -31,6 +33,8 @@ export interface SubCategory {
   image_alt_text?: string;
   meta_title?: string;
   meta_description?: string;
+  discount_override_enabled?: boolean;
+  discount_percentage?: number;
 }
 
 export interface Collection {

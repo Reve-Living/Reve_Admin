@@ -72,6 +72,8 @@ const Products = () => {
   const [selectedCategory, setSelectedCategory] = useState<string | 'all'>(() => searchParams.get('category') || 'all');
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | 'all'>(() => searchParams.get('subcategory') || 'all');
   const [highlightedProductId, setHighlightedProductId] = useState<number | null>(null);
+  const [draftSortOrders, setDraftSortOrders] = useState<Record<number, number>>({});
+  const [savingSortOrderIds, setSavingSortOrderIds] = useState<Set<number>>(new Set());
   const productRowRefs = useRef(new Map<number, HTMLTableRowElement>());
   const productSearch = searchParams.get('q') || '';
   const focusProductId = Number(searchParams.get('focus') || 0);
@@ -116,6 +118,9 @@ const Products = () => {
 
       setProducts(nextProducts);
       setCategories(nextCategories);
+      setDraftSortOrders(
+        Object.fromEntries(nextProducts.map((product) => [product.id, getDisplayOrder(product.sort_order)]))
+      );
     } catch {
       toast.error('Failed to load products');
     } finally {
@@ -154,6 +159,28 @@ const Products = () => {
       );
     } catch {
       toast.error('Failed to update product visibility');
+    }
+  };
+
+  const handleUpdateSortOrder = async (product: Product) => {
+    const nextSortOrder = getDisplayOrder(draftSortOrders[product.id]);
+    setSavingSortOrderIds((current) => new Set(current).add(product.id));
+    try {
+      await apiPatch(`/products/${product.id}/?response=none`, { sort_order: nextSortOrder });
+      toast.success('Display order updated');
+      await loadData();
+    } catch {
+      toast.error('Failed to update display order');
+      setDraftSortOrders((current) => ({
+        ...current,
+        [product.id]: getDisplayOrder(product.sort_order),
+      }));
+    } finally {
+      setSavingSortOrderIds((current) => {
+        const next = new Set(current);
+        next.delete(product.id);
+        return next;
+      });
     }
   };
 
@@ -463,7 +490,32 @@ const Products = () => {
                   className={highlightedProductId === product.id ? 'bg-primary/10 transition-colors duration-300' : ''}
                 >
                   <TableCell className="font-medium">{product.name}</TableCell>
-                  <TableCell>{Number.isFinite(Number(product.sort_order)) ? product.sort_order : 0}</TableCell>
+                  <TableCell>
+                    <div className="flex min-w-[150px] items-center gap-2">
+                      <Input
+                        type="number"
+                        value={draftSortOrders[product.id] ?? getDisplayOrder(product.sort_order)}
+                        onChange={(event) =>
+                          setDraftSortOrders((current) => ({
+                            ...current,
+                            [product.id]: Number(event.target.value),
+                          }))
+                        }
+                        className="h-9 w-20"
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          savingSortOrderIds.has(product.id) ||
+                          getDisplayOrder(draftSortOrders[product.id]) === getDisplayOrder(product.sort_order)
+                        }
+                        onClick={() => handleUpdateSortOrder(product)}
+                      >
+                        {savingSortOrderIds.has(product.id) ? 'Saving' : 'Update'}
+                      </Button>
+                    </div>
+                  </TableCell>
                   <TableCell>{product.category_name || product.category_slug || product.category}</TableCell>
                   <TableCell>£{product.price}</TableCell>
                   <TableCell>
