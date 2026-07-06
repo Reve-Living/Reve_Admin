@@ -1390,7 +1390,7 @@ const Categories = () => {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  When checked, the storefront shows this discount for products in this category. Product form discounts are not overwritten.
+                  When checked, the storefront shows this discount for products in this category. Product form discounts will be overwritten.
                 </p>
               </div>
 
@@ -1977,7 +1977,7 @@ const Categories = () => {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  When checked, this subcategory discount is shown on the storefront. Product form discounts are not overwritten.
+                  When checked, this subcategory discount is shown on the storefront. Product form discounts will be overwritten.
                 </p>
               </div>
 
