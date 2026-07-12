@@ -1929,36 +1929,10 @@ const ProductForm = () => {
           payload.images = [];
         }
       }
-      if (!payload.videos || payload.videos.length === 0) {
-        delete (payload as Partial<ProductFormValues>).videos;
-      }
-      if (!payload.colors || payload.colors.length === 0) {
-        delete (payload as Partial<ProductFormValues>).colors;
-      }
-      if (!payload.sizes || payload.sizes.length === 0) {
-        delete (payload as Partial<ProductFormValues>).sizes;
-      }
-      if (!payload.styles || payload.styles.length === 0) {
-        delete (payload as Partial<ProductFormValues>).styles;
-      }
-      if (!payload.fabrics || payload.fabrics.length === 0) {
-        delete (payload as Partial<ProductFormValues>).fabrics;
-      }
-      if (!payload.features || payload.features.length === 0) {
-        delete (payload as Partial<ProductFormValues>).features;
-      }
-      if (!payload.sofa_feature_highlights || payload.sofa_feature_highlights.length === 0) {
-        delete (payload as Partial<ProductFormValues>).sofa_feature_highlights;
-      }
-      if (!payload.dimensions || payload.dimensions.length === 0) {
-        delete (payload as Partial<ProductFormValues>).dimensions;
-      }
+      // Keep empty arrays for editable option/content lists so clearing the last item persists.
       // Avoid wiping existing dimension images when editing if none are provided in the form payload.
       if (isEditing && (!payload.dimension_images || payload.dimension_images.length === 0)) {
         delete (payload as Partial<ProductFormValues>).dimension_images;
-      }
-      if (!payload.faqs || payload.faqs.length === 0) {
-        delete (payload as Partial<ProductFormValues>).faqs;
       }
 
       // Preserve existing filters when editing unless the user changed/cleared them.
