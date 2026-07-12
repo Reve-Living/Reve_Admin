@@ -13,6 +13,8 @@ import { apiGet, apiPost, apiPut, apiUpload } from '../lib/api';
 import type { Category, Product, ProductDimensionRow, ProductStockStatus, SubCategory, FilterType, FilterOption, CategoryFilter, ProductMattress } from '../lib/types';
 import { ICON_UPLOAD_ACCEPT, IMAGE_UPLOAD_ACCEPT, WEBP_UPLOAD_HINT } from '../lib/upload';
 
+const buildAdminProductDetailPath = (productId: string | number) => `/products/${productId}/?admin_detail=1`;
+
 const resolveCategoryId = (product: Product, categories: Category[]): number | undefined => {
   const rawCategory = Number(product.category);
   if (Number.isFinite(rawCategory) && rawCategory > 0) return rawCategory;
@@ -326,6 +328,11 @@ type StyleLibraryItem = {
 const MAX_INLINE_SVG_CHARS = 50000;
 const MAX_PRODUCT_PAYLOAD_BYTES = 2500000;
 type MattressFormValue = NonNullable<ProductFormValues['mattresses']>[number];
+type FabricBulkDeleteTarget = {
+  index: number;
+  name: string;
+  selectedProductIds: number[];
+};
 
 const readFileAsText = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -604,6 +611,8 @@ const ProductForm = () => {
   const [subcategories, setSubcategories] = useState<SubCategory[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [fabricBulkDeleteTarget, setFabricBulkDeleteTarget] = useState<FabricBulkDeleteTarget | null>(null);
+  const [isBulkDeletingFabric, setIsBulkDeletingFabric] = useState(false);
   // Track whether filter selections changed so we don't wipe them on save
   const [filterValuesDirty, setFilterValuesDirty] = useState(false);
   const [importProductOptions, setImportProductOptions] = useState<Product[]>([]);
@@ -721,6 +730,29 @@ const ProductForm = () => {
     () => importProductOptions.find((product) => product.id === selectedImportProductId) || null,
     [importProductOptions, selectedImportProductId]
   );
+  const activeCategoryIdForFabricDelete = useMemo(() => {
+    const categoryId = Number(selectedCategory);
+    if (Number.isFinite(categoryId) && categoryId > 0) return categoryId;
+    return loadedProductCategory || 0;
+  }, [loadedProductCategory, selectedCategory]);
+  const fabricDeleteCategoryProducts = useMemo(() => {
+    const currentProductId = Number(id || 0);
+    if (!activeCategoryIdForFabricDelete) return [];
+
+    return importProductOptions
+      .filter((product) => {
+        if (Number(product.id) === currentProductId) return false;
+        if (Number(product.category) === activeCategoryIdForFabricDelete) return true;
+
+        const productSubcategory = subcategories.find(
+          (subcategory) => Number(subcategory.id) === Number(product.subcategory || 0)
+        );
+        return productSubcategory
+          ? subcategoryMatchesCategory(productSubcategory, activeCategoryIdForFabricDelete)
+          : false;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [activeCategoryIdForFabricDelete, id, importProductOptions, subcategories]);
   const selectedSuggestedProducts = watch('suggested_products') || [];
   const suggestionFilterSubcategories = useMemo(() => {
     if (suggestionCategoryFilter === 'all') return subcategories;
@@ -1109,7 +1141,7 @@ const ProductForm = () => {
     const loadProduct = async () => {
       if (!id) return;
       try {
-        const product = await apiGet<Product>(`/products/${id}/`);
+        const product = await apiGet<Product>(buildAdminProductDetailPath(id), { noStore: true });
         const resolvedCategoryId = resolveCategoryId(product, categories);
         const resolvedSubcategoryId = resolveSubcategoryId(product, subcategories, resolvedCategoryId);
         setLoadedProductCategory(resolvedCategoryId ?? null);
@@ -1384,6 +1416,99 @@ const ProductForm = () => {
     });
   };
 
+  const openFabricDeleteOptions = (index: number) => {
+    const currentFabric = (getValues('fabrics') || [])[index];
+    const fabricName = (currentFabric?.name || '').trim();
+
+    if (!fabricName || !isEditing) {
+      removeFabric(index);
+      return;
+    }
+
+    setFabricBulkDeleteTarget({
+      index,
+      name: fabricName,
+      selectedProductIds: [],
+    });
+  };
+
+  const closeFabricDeleteOptions = () => {
+    if (isBulkDeletingFabric) return;
+    setFabricBulkDeleteTarget(null);
+  };
+
+  const removeFabricHereOnly = () => {
+    if (!fabricBulkDeleteTarget) return;
+    removeFabric(fabricBulkDeleteTarget.index);
+    setFabricBulkDeleteTarget(null);
+  };
+
+  const setFabricBulkDeleteSelection = (productId: number, checked: boolean) => {
+    setFabricBulkDeleteTarget((current) => {
+      if (!current) return current;
+      const selected = new Set(current.selectedProductIds);
+      if (checked) {
+        selected.add(productId);
+      } else {
+        selected.delete(productId);
+      }
+      return { ...current, selectedProductIds: Array.from(selected) };
+    });
+  };
+
+  const selectAllFabricCategoryProducts = () => {
+    setFabricBulkDeleteTarget((current) =>
+      current
+        ? {
+            ...current,
+            selectedProductIds: fabricDeleteCategoryProducts.map((product) => product.id),
+          }
+        : current
+    );
+  };
+
+  const clearFabricCategoryProducts = () => {
+    setFabricBulkDeleteTarget((current) => (current ? { ...current, selectedProductIds: [] } : current));
+  };
+
+  const deleteFabricFromSelectedProducts = async () => {
+    if (!fabricBulkDeleteTarget) return;
+
+    const currentProductId = Number(id || 0);
+    const productIds = Array.from(
+      new Set(
+        [currentProductId, ...fabricBulkDeleteTarget.selectedProductIds].filter(
+          (productId) => Number.isFinite(productId) && productId > 0
+        )
+      )
+    );
+
+    if (productIds.length === 0) {
+      removeFabricHereOnly();
+      return;
+    }
+
+    setIsBulkDeletingFabric(true);
+    try {
+      const result = await apiPost<{ product_count?: number }>('/products/delete-fabric/', {
+        name: fabricBulkDeleteTarget.name,
+        product_ids: productIds,
+      });
+      removeFabric(fabricBulkDeleteTarget.index);
+      setFabricBulkDeleteTarget(null);
+      const productCount = Number(result.product_count ?? 0);
+      toast.success(
+        productCount > 0
+          ? `Deleted ${fabricBulkDeleteTarget.name} from ${productCount} product${productCount === 1 ? '' : 's'}`
+          : `Removed ${fabricBulkDeleteTarget.name} here; no matching saved products found`
+      );
+    } catch {
+      toast.error('Failed to delete fabric from selected products');
+    } finally {
+      setIsBulkDeletingFabric(false);
+    }
+  };
+
   const handleUpload = async (file: File, onSuccess: (url: string) => void, inlineSvgPreferred = false) => {
     setIsUploading(true);
     try {
@@ -1431,7 +1556,7 @@ const ProductForm = () => {
       return;
     }
     try {
-      const product = await apiGet<Product>(`/products/${selectedImportProductId}/`);
+      const product = await apiGet<Product>(buildAdminProductDetailPath(selectedImportProductId));
       const styles = (product.styles || []).map((s) => ({
         name: (s.name || '').replace(/\s+/g, '-'),
         icon_url: s.icon_url || '',
@@ -1465,7 +1590,7 @@ const ProductForm = () => {
       return;
     }
     try {
-      const product = await apiGet<Product>(`/products/${selectedImportProductId}/`);
+      const product = await apiGet<Product>(buildAdminProductDetailPath(selectedImportProductId));
       const sizes = (product.sizes || []).map((s) => ({
         name: s.name || '',
         description: s.description || '',
@@ -1486,7 +1611,7 @@ const ProductForm = () => {
       return;
     }
     try {
-      const product = await apiGet<Product>(`/products/${selectedImportProductId}/`);
+      const product = await apiGet<Product>(buildAdminProductDetailPath(selectedImportProductId));
       const colors = (product.colors || []).map((c) => ({
         name: c.name || '',
         hex_code: c.hex_code || '#000000',
@@ -1508,7 +1633,7 @@ const ProductForm = () => {
       return;
     }
     try {
-      const product = await apiGet<Product>(`/products/${selectedImportProductId}/`);
+      const product = await apiGet<Product>(buildAdminProductDetailPath(selectedImportProductId));
       const rawDimensions = Array.isArray(product.dimensions)
         ? product.dimensions.map((row) => ({
             measurement: row.measurement || '',
@@ -1547,7 +1672,7 @@ const ProductForm = () => {
       return;
     }
     try {
-      const product = await apiGet<Product>(`/products/${selectedImportProductId}/`);
+      const product = await apiGet<Product>(buildAdminProductDetailPath(selectedImportProductId));
       const fabrics = (product.fabrics || []).map((f) => ({
         name: f.name || '',
         image_url: f.image_url || '',
@@ -1574,7 +1699,7 @@ const ProductForm = () => {
       return;
     }
     try {
-      const product = await apiGet<Product>(`/products/${selectedImportProductId}/`);
+      const product = await apiGet<Product>(buildAdminProductDetailPath(selectedImportProductId));
       const incoming = (product.short_description || '').trim();
       if (!incoming) {
         toast.error('Selected product has no short description to import');
@@ -1595,7 +1720,7 @@ const ProductForm = () => {
       return;
     }
     try {
-      const product = await apiGet<Product>(`/products/${selectedImportProductId}/`);
+      const product = await apiGet<Product>(buildAdminProductDetailPath(selectedImportProductId));
       const incoming = (product.description || '').trim();
       if (!incoming) {
         toast.error('Selected product has no long description to import');
@@ -1616,7 +1741,7 @@ const ProductForm = () => {
       return;
     }
     try {
-      const product = await apiGet<Product>(`/products/${selectedImportProductId}/`);
+      const product = await apiGet<Product>(buildAdminProductDetailPath(selectedImportProductId));
       const faqs = Array.isArray(product.faqs)
         ? product.faqs
             .map((faq) => ({
@@ -1660,7 +1785,7 @@ const ProductForm = () => {
       return;
     }
     try {
-      const product = await apiGet<Product>(`/products/${selectedImportProductId}/`);
+      const product = await apiGet<Product>(buildAdminProductDetailPath(selectedImportProductId));
       const deliveryInfo = (product.delivery_info || '').trim();
 
       if (!deliveryInfo) {
@@ -1683,7 +1808,7 @@ const ProductForm = () => {
       return;
     }
     try {
-      const product = await apiGet<Product>(`/products/${selectedImportProductId}/`);
+      const product = await apiGet<Product>(buildAdminProductDetailPath(selectedImportProductId));
       const returnsInfo = (product.returns_guarantee || '').trim();
 
       if (!returnsInfo) {
@@ -2772,7 +2897,13 @@ const ProductForm = () => {
                       placeholder="Fabric name (e.g. Plush Velvet)"
                       className="flex-1"
                     />
-                    <Button type="button" variant="ghost" size="icon" onClick={() => removeFabric(index)}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openFabricDeleteOptions(index)}
+                      disabled={isBulkDeletingFabric}
+                    >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
@@ -2784,6 +2915,99 @@ const ProductForm = () => {
                     />
                     Shared across sizes
                   </label>
+                  {fabricBulkDeleteTarget?.index === index && (
+                    <div className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+                      <div>
+                        <p className="text-sm font-medium text-destructive">Delete {fabricBulkDeleteTarget.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Also delete from category products.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={selectAllFabricCategoryProducts}
+                          disabled={fabricDeleteCategoryProducts.length === 0 || isBulkDeletingFabric}
+                        >
+                          Select all category products
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={clearFabricCategoryProducts}
+                          disabled={fabricBulkDeleteTarget.selectedProductIds.length === 0 || isBulkDeletingFabric}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+
+                      {fabricDeleteCategoryProducts.length > 0 ? (
+                        <div className="max-h-56 space-y-2 overflow-auto rounded-md border bg-white p-2">
+                          {fabricDeleteCategoryProducts.map((product) => (
+                            <label
+                              key={product.id}
+                              className="flex cursor-pointer items-start gap-2 rounded px-2 py-1 text-sm hover:bg-muted/60"
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-1 h-4 w-4"
+                                checked={fabricBulkDeleteTarget.selectedProductIds.includes(product.id)}
+                                onChange={(event) =>
+                                  setFabricBulkDeleteSelection(product.id, event.target.checked)
+                                }
+                                disabled={isBulkDeletingFabric}
+                              />
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium">{product.name}</span>
+                                <span className="block text-xs text-muted-foreground">
+                                  #{product.id}
+                                  {product.subcategory_name ? ` / ${product.subcategory_name}` : ''}
+                                </span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="rounded-md border bg-white p-2 text-xs text-muted-foreground">
+                          No other products found in this category.
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={closeFabricDeleteOptions}
+                          disabled={isBulkDeletingFabric}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={removeFabricHereOnly}
+                          disabled={isBulkDeletingFabric}
+                        >
+                          Remove here only
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={deleteFabricFromSelectedProducts}
+                          disabled={isBulkDeletingFabric}
+                        >
+                          {isBulkDeletingFabric ? 'Deleting...' : 'Delete here + selected'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   <div className="space-y-2 rounded-md border border-dashed p-3">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-medium">Fabric colours</p>

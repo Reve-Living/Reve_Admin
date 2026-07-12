@@ -27,6 +27,9 @@ const getCache = new Map<string, { ts: number; data: unknown }>();
 const getInFlight = new Map<string, Promise<unknown>>();
 const GET_CACHE_TTL_MS = 15 * 1000;
 const LONG_GET_CACHE_TTL_MS = 60 * 1000;
+type ApiGetOptions = {
+  noStore?: boolean;
+};
 
 const normalizeGetCacheKey = (path: string) => {
   const [pathname, query = ""] = path.split("?");
@@ -121,16 +124,16 @@ const runMutation = async <T>(
   return request;
 };
 
-export const apiGet = async <T>(path: string): Promise<T> => {
+export const apiGet = async <T>(path: string, options: ApiGetOptions = {}): Promise<T> => {
   const cacheKey = normalizeGetCacheKey(path);
   const now = Date.now();
   const cached = getCache.get(cacheKey);
-  if (cached && now - cached.ts < getCacheTtlMs(path)) {
+  if (!options.noStore && cached && now - cached.ts < getCacheTtlMs(path)) {
     return cloneData(cached.data) as T;
   }
 
   const existing = getInFlight.get(cacheKey);
-  if (existing) {
+  if (!options.noStore && existing) {
     return cloneData((await existing) as T);
   }
 
@@ -143,14 +146,18 @@ export const apiGet = async <T>(path: string): Promise<T> => {
         throw new Error(await res.text());
       }
       const data = (await res.json()) as T;
-      getCache.set(cacheKey, { ts: Date.now(), data });
+      if (!options.noStore) {
+        getCache.set(cacheKey, { ts: Date.now(), data });
+      }
       return data;
     })
     .finally(() => {
       getInFlight.delete(cacheKey);
     });
 
-  getInFlight.set(cacheKey, request);
+  if (!options.noStore) {
+    getInFlight.set(cacheKey, request);
+  }
   return cloneData(await request);
 };
 
