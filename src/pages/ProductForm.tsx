@@ -123,6 +123,7 @@ const PRODUCT_STOCK_STATUS_OPTIONS: Array<{ value: ProductStockStatus; label: st
 ];
 
 type ColorStockStatus = 'available' | 'out_of_stock' | 'stock_check_needed';
+type SizeStockStatus = ColorStockStatus;
 
 const COLOR_STOCK_STATUS_OPTIONS: Array<{ value: ColorStockStatus; label: string }> = [
   { value: 'available', label: 'Available' },
@@ -130,11 +131,20 @@ const COLOR_STOCK_STATUS_OPTIONS: Array<{ value: ColorStockStatus; label: string
   { value: 'stock_check_needed', label: 'Stock check needed' },
 ];
 
+const SIZE_STOCK_STATUS_OPTIONS: Array<{ value: SizeStockStatus; label: string }> = COLOR_STOCK_STATUS_OPTIONS;
+
 const normalizeColorStockStatus = (color?: { stock_status?: string | null; is_available?: boolean | null }): ColorStockStatus => {
   if (color?.stock_status === 'out_of_stock' || color?.stock_status === 'stock_check_needed') {
     return color.stock_status;
   }
   if (color?.is_available === false) return 'out_of_stock';
+  return 'available';
+};
+
+const normalizeSizeStockStatus = (size?: { stock_status?: string | null }): SizeStockStatus => {
+  if (size?.stock_status === 'out_of_stock' || size?.stock_status === 'stock_check_needed') {
+    return size.stock_status;
+  }
   return 'available';
 };
 
@@ -204,6 +214,7 @@ const productSchema = z.object({
           name: z.string().optional(),
           description: z.string().optional(),
           price_delta: z.number().optional(),
+          stock_status: z.enum(['available', 'out_of_stock', 'stock_check_needed']).optional(),
         })
       )
       .optional(),
@@ -1293,6 +1304,7 @@ const ProductForm = () => {
           name: s.name,
           description: s.description || '',
           price_delta: normalizeStoredSizePrice(Number(product.price ?? 0), Number(s.price_delta ?? 0)),
+          stock_status: normalizeSizeStockStatus(s),
         }));
         setValue('sizes', sizes);
         setValue('styles', styles);
@@ -1615,6 +1627,7 @@ const ProductForm = () => {
         name: s.name || '',
         description: s.description || '',
         price_delta: normalizeStoredSizePrice(Number(product.price ?? 0), Number(s.price_delta ?? 0)),
+        stock_status: normalizeSizeStockStatus(s),
       }));
       const merged = [...(watch('sizes') || []), ...sizes];
       setValue('sizes', merged);
@@ -1960,6 +1973,7 @@ const ProductForm = () => {
             name: (s.name || '').trim(),
             description: (s.description || '').trim(),
             price_delta: Number.isFinite(Number(s.price_delta)) ? Number(s.price_delta) : 0,
+            stock_status: normalizeSizeStockStatus(s),
           }))
           .filter((s) => s.name.length > 0),
         styles: (data.styles || [])
@@ -2735,7 +2749,7 @@ const ProductForm = () => {
             <div className="grid gap-2">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium">Sizes</label>
-                <Button type="button" variant="outline" size="sm" onClick={() => appendSize({ name: '', description: '', price_delta: 0 })}>
+                <Button type="button" variant="outline" size="sm" onClick={() => appendSize({ name: '', description: '', price_delta: 0, stock_status: 'available' })}>
                   <Plus className="h-4 w-4 mr-2" /> Add Size
                 </Button>
               </div>
@@ -2764,12 +2778,12 @@ const ProductForm = () => {
                 {sizeFields.map((field, index) => (
                   <div key={field.id} className="grid grid-cols-12 gap-2">
                     <Input
-                      className="col-span-4"
+                      className="col-span-3"
                       {...register(`sizes.${index}.name` as const)}
                       placeholder="Size name (e.g. Small Double)"
                     />
                     <Input
-                      className="col-span-3"
+                      className="col-span-2"
                       type="number"
                       step="0.01"
                       {...register(`sizes.${index}.price_delta` as const, { valueAsNumber: true })}
@@ -2780,6 +2794,19 @@ const ProductForm = () => {
                       {...register(`sizes.${index}.description` as const)}
                       placeholder="Size description (optional)"
                     />
+                    <select
+                      className="col-span-2 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={normalizeSizeStockStatus(watch(`sizes.${index}`) as any)}
+                      onChange={(event) => {
+                        setValue(`sizes.${index}.stock_status`, event.target.value as SizeStockStatus);
+                      }}
+                    >
+                      {SIZE_STOCK_STATUS_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                     <Button
                       type="button"
                       variant="ghost"

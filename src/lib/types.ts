@@ -176,6 +176,7 @@ export interface ProductSize {
   name: string;
   description?: string;
   price_delta?: number;
+  stock_status?: 'available' | 'out_of_stock' | 'stock_check_needed';
 }
 
 export interface ProductStyle {
