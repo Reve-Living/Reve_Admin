@@ -122,6 +122,22 @@ const PRODUCT_STOCK_STATUS_OPTIONS: Array<{ value: ProductStockStatus; label: st
   { value: 'stock_check_needed', label: 'Stock check needed' },
 ];
 
+type ColorStockStatus = 'available' | 'out_of_stock' | 'stock_check_needed';
+
+const COLOR_STOCK_STATUS_OPTIONS: Array<{ value: ColorStockStatus; label: string }> = [
+  { value: 'available', label: 'Available' },
+  { value: 'out_of_stock', label: 'Out of stock' },
+  { value: 'stock_check_needed', label: 'Stock check needed' },
+];
+
+const normalizeColorStockStatus = (color?: { stock_status?: string | null; is_available?: boolean | null }): ColorStockStatus => {
+  if (color?.stock_status === 'out_of_stock' || color?.stock_status === 'stock_check_needed') {
+    return color.stock_status;
+  }
+  if (color?.is_available === false) return 'out_of_stock';
+  return 'available';
+};
+
 const normalizeProductStockStatus = (
   stockStatus?: ProductStockStatus | string | null,
   inStock: boolean = true
@@ -178,6 +194,7 @@ const productSchema = z.object({
           hex_code: z.string().optional(),
           image_url: z.string().optional(),
           is_available: z.boolean().optional(),
+          stock_status: z.enum(['available', 'out_of_stock', 'stock_check_needed']).optional(),
         })
       )
       .optional(),
@@ -228,6 +245,7 @@ const productSchema = z.object({
                 hex_code: z.string().optional(),
                 image_url: z.string().optional(),
                 is_available: z.boolean().optional(),
+                stock_status: z.enum(['available', 'out_of_stock', 'stock_check_needed']).optional(),
               })
             )
             .optional(),
@@ -1194,7 +1212,8 @@ const ProductForm = () => {
           name: c.name,
           hex_code: c.hex_code || c.image || '#000000',
           image_url: c.image_url || '',
-          is_available: c.is_available ?? true,
+          is_available: normalizeColorStockStatus(c) !== 'out_of_stock',
+          stock_status: normalizeColorStockStatus(c),
         }));
         const styles = product.styles.map((s) => ({
           name: s.name,
@@ -1228,7 +1247,8 @@ const ProductForm = () => {
             name: color.name || '',
             hex_code: color.hex_code || '#000000',
             image_url: color.image_url || '',
-            is_available: color.is_available ?? true,
+            is_available: normalizeColorStockStatus(color) !== 'out_of_stock',
+            stock_status: normalizeColorStockStatus(color),
           })),
         }));
         const mattresses = (product.mattresses || []).map((m) => ({
@@ -1616,7 +1636,8 @@ const ProductForm = () => {
         name: c.name || '',
         hex_code: c.hex_code || '#000000',
         image_url: c.image_url || '',
-        is_available: c.is_available ?? true,
+        is_available: normalizeColorStockStatus(c) !== 'out_of_stock',
+        stock_status: normalizeColorStockStatus(c),
       }));
       const merged = [...(watch('colors') || []), ...colors];
       setValue('colors', merged);
@@ -1681,7 +1702,8 @@ const ProductForm = () => {
           name: c.name || '',
           hex_code: c.hex_code || '#000000',
           image_url: c.image_url || '',
-          is_available: c.is_available ?? true,
+          is_available: normalizeColorStockStatus(c) !== 'out_of_stock',
+          stock_status: normalizeColorStockStatus(c),
         })),
       }));
       const merged = [...(watch('fabrics') || []), ...fabrics];
@@ -1929,7 +1951,8 @@ const ProductForm = () => {
             name: (col.name || '').trim(),
             hex_code: (col.hex_code || '#000000').trim(),
             image_url: (col.image_url || '').trim(),
-            is_available: col.is_available !== false,
+            stock_status: normalizeColorStockStatus(col),
+            is_available: normalizeColorStockStatus(col) !== 'out_of_stock',
           }))
           .filter((col) => col.name.length > 0),
         sizes: (data.sizes || [])
@@ -1980,7 +2003,8 @@ const ProductForm = () => {
                 name: (c.name || '').trim(),
                 hex_code: (c.hex_code || '').trim(),
                 image_url: (c.image_url || '').trim(),
-                is_available: c.is_available !== false,
+                stock_status: normalizeColorStockStatus(c),
+                is_available: normalizeColorStockStatus(c) !== 'out_of_stock',
               }))
               .filter((c) => c.image_url.length > 0),
           }))
@@ -2818,12 +2842,19 @@ const ProductForm = () => {
                     className="text-sm"
                   />
                   <select
-                    value={watch(`colors.${index}.is_available`) === false ? 'false' : 'true'}
+                    value={normalizeColorStockStatus(watch(`colors.${index}`) as any)}
                     className="w-full rounded-md border bg-white px-3 py-2 text-sm"
-                    onChange={(e) => setValue(`colors.${index}.is_available`, e.target.value === 'true')}
+                    onChange={(e) => {
+                      const stockStatus = e.target.value as ColorStockStatus;
+                      setValue(`colors.${index}.stock_status`, stockStatus);
+                      setValue(`colors.${index}.is_available`, stockStatus !== 'out_of_stock');
+                    }}
                   >
-                    <option value="true">Available</option>
-                    <option value="false">Out of stock</option>
+                    {COLOR_STOCK_STATUS_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
@@ -2865,7 +2896,7 @@ const ProductForm = () => {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => appendColor({ name: '', hex_code: '#000000', image_url: '', is_available: true })}
+                onClick={() => appendColor({ name: '', hex_code: '#000000', image_url: '', is_available: true, stock_status: 'available' })}
               >
                 <Plus className="h-4 w-4 mr-2" /> Add Color
               </Button>
@@ -2882,7 +2913,7 @@ const ProductForm = () => {
                       appendFabric({
                         name: '',
                         is_shared: false,
-                        colors: [{ name: '', hex_code: '', image_url: '', is_available: true }],
+                        colors: [{ name: '', hex_code: '', image_url: '', is_available: true, stock_status: 'available' }],
                       })
                     }
                   >
@@ -3019,7 +3050,7 @@ const ProductForm = () => {
                           const current = (watch(`fabrics.${index}.colors`) || []) as any[];
                           setValue(`fabrics.${index}.colors`, [
                             ...current,
-                            { name: '', hex_code: '', image_url: '', is_available: true },
+                            { name: '', hex_code: '', image_url: '', is_available: true, stock_status: 'available' },
                           ]);
                         }}
                       >
@@ -3054,9 +3085,9 @@ const ProductForm = () => {
                                   {color.name}
                                 </span>
                               )}
-                              {color.is_available === false && (
+                              {normalizeColorStockStatus(color) !== 'available' && (
                                 <span className="absolute inset-x-1 bottom-1 rounded bg-white/95 px-1 py-0.5 text-center text-[9px] font-semibold uppercase tracking-wide text-rose-700">
-                                  Out
+                                  {normalizeColorStockStatus(color) === 'stock_check_needed' ? 'Check' : 'Out'}
                                 </span>
                               )}
                             </div>
@@ -3081,16 +3112,24 @@ const ProductForm = () => {
                               className="flex-1"
                             />
                             <select
-                              value={color.is_available === false ? 'false' : 'true'}
+                              value={normalizeColorStockStatus(color)}
                               onChange={(e) => {
+                                const stockStatus = e.target.value as ColorStockStatus;
                                 const current = (watch(`fabrics.${index}.colors`) || []) as any[];
-                                current[colorIdx] = { ...current[colorIdx], is_available: e.target.value === 'true' };
+                                current[colorIdx] = {
+                                  ...current[colorIdx],
+                                  stock_status: stockStatus,
+                                  is_available: stockStatus !== 'out_of_stock',
+                                };
                                 setValue(`fabrics.${index}.colors`, current);
                               }}
                               className="rounded-md border bg-white px-3 py-2 text-sm"
                             >
-                              <option value="true">Available</option>
-                              <option value="false">Out of stock</option>
+                              {COLOR_STOCK_STATUS_OPTIONS.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
                             </select>
                             <Button
                               type="button"

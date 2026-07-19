@@ -168,6 +168,7 @@ export interface ProductColor {
   image_url?: string;
   image?: string;
   is_available?: boolean;
+  stock_status?: 'available' | 'out_of_stock' | 'stock_check_needed';
 }
 
 export interface ProductSize {
