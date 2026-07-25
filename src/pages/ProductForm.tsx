@@ -783,6 +783,10 @@ const ProductForm = () => {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [activeCategoryIdForFabricDelete, id, importProductOptions, subcategories]);
   const selectedSuggestedProducts = watch('suggested_products') || [];
+  const selectedSuggestedProductIds = useMemo(
+    () => new Set(selectedSuggestedProducts.map((productId) => Number(productId))),
+    [selectedSuggestedProducts]
+  );
   const suggestionFilterSubcategories = useMemo(() => {
     if (suggestionCategoryFilter === 'all') return subcategories;
     return subcategories.filter((subcategory) => subcategoryMatchesCategory(subcategory, suggestionCategoryFilter));
@@ -4081,7 +4085,7 @@ const ProductForm = () => {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setValue('suggested_products', [])}
+                  onClick={() => setValue('suggested_products', [], { shouldDirty: true })}
                   disabled={selectedSuggestedProducts.length === 0}
                 >
                   Clear
@@ -4147,7 +4151,7 @@ const ProductForm = () => {
 
               <div className="max-h-72 overflow-y-auto rounded-md border border-input bg-white px-3 py-2 space-y-2">
                 {suggestionCandidates.map((product) => {
-                  const checked = selectedSuggestedProducts.includes(product.id);
+                  const checked = selectedSuggestedProductIds.has(Number(product.id));
                   const categoryLabel =
                     categories.find((category) => category.id === resolveCategoryId(product, categories))?.name ||
                     product.category_name ||
