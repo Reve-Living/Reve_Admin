@@ -111,6 +111,11 @@ const Categories = () => {
   const [categoryHidden, setCategoryHidden] = useState(false);
   const [categoryDiscountOverrideEnabled, setCategoryDiscountOverrideEnabled] = useState(false);
   const [categoryDiscountPercentage, setCategoryDiscountPercentage] = useState(0);
+  const [categoryFaqsOverrideEnabled, setCategoryFaqsOverrideEnabled] = useState(false);
+  const [categoryFaqs, setCategoryFaqs] = useState<{ question: string; answer: string }[]>([]);
+  const [categoryDeliveryOverrideEnabled, setCategoryDeliveryOverrideEnabled] = useState(false);
+  const [categoryDeliveryTitle, setCategoryDeliveryTitle] = useState('');
+  const [categoryDeliveryInfo, setCategoryDeliveryInfo] = useState('');
   const [subCategoryProductSearch, setSubCategoryProductSearch] = useState('');
   const [subCategoryFormData, setSubCategoryFormData] = useState({
     name: '',
@@ -124,6 +129,11 @@ const Categories = () => {
     sort_order: 0,
     discountOverrideEnabled: false,
     discountPercentage: 0,
+    faqsOverrideEnabled: false,
+    faqs: [] as { question: string; answer: string }[],
+    deliveryOverrideEnabled: false,
+    deliveryTitle: '',
+    deliveryInfo: '',
     linkedCategoryIds: [] as number[],
     selectedProducts: [] as number[],
   });
@@ -215,6 +225,11 @@ const Categories = () => {
       setCategoryHidden(Boolean(category.is_hidden));
       setCategoryDiscountOverrideEnabled(Boolean(category.discount_override_enabled));
       setCategoryDiscountPercentage(Number(category.discount_percentage) || 0);
+      setCategoryFaqsOverrideEnabled(Boolean(category.faqs_override_enabled));
+      setCategoryFaqs(Array.isArray(category.faqs) ? category.faqs : []);
+      setCategoryDeliveryOverrideEnabled(Boolean(category.delivery_info_override_enabled));
+      setCategoryDeliveryTitle(category.delivery_title || '');
+      setCategoryDeliveryInfo(category.delivery_info || '');
     } else {
       setEditingCategory(null);
       setCategoryName('');
@@ -228,6 +243,11 @@ const Categories = () => {
       setCategoryHidden(false);
       setCategoryDiscountOverrideEnabled(false);
       setCategoryDiscountPercentage(0);
+      setCategoryFaqsOverrideEnabled(false);
+      setCategoryFaqs([]);
+      setCategoryDeliveryOverrideEnabled(false);
+      setCategoryDeliveryTitle('');
+      setCategoryDeliveryInfo('');
     }
     setShowCategoryModal(true);
   };
@@ -249,6 +269,11 @@ const Categories = () => {
         sort_order: Number(subCategory.sort_order) || 0,
         discountOverrideEnabled: Boolean(subCategory.discount_override_enabled),
         discountPercentage: Number(subCategory.discount_percentage) || 0,
+        faqsOverrideEnabled: Boolean(subCategory.faqs_override_enabled),
+        faqs: Array.isArray(subCategory.faqs) ? subCategory.faqs : [],
+        deliveryOverrideEnabled: Boolean(subCategory.delivery_info_override_enabled),
+        deliveryTitle: subCategory.delivery_title || '',
+        deliveryInfo: subCategory.delivery_info || '',
         linkedCategoryIds: getLinkedCategoryIds(subCategory).filter((id) => id !== Number(subCategory.category)),
         selectedProducts: products
           .filter((p) => p.subcategory === subCategory.id)
@@ -269,6 +294,11 @@ const Categories = () => {
         sort_order: 0,
         discountOverrideEnabled: false,
         discountPercentage: 0,
+        faqsOverrideEnabled: false,
+        faqs: [],
+        deliveryOverrideEnabled: false,
+        deliveryTitle: '',
+        deliveryInfo: '',
         linkedCategoryIds: [],
         selectedProducts: [],
       });
@@ -454,6 +484,11 @@ const Categories = () => {
           discount_percentage: categoryDiscountOverrideEnabled
             ? Math.min(Math.max(Math.round(Number(categoryDiscountPercentage) || 0), 0), 100)
             : 0,
+          faqs_override_enabled: categoryFaqsOverrideEnabled,
+          faqs: categoryFaqs,
+          delivery_info_override_enabled: categoryDeliveryOverrideEnabled,
+          delivery_title: categoryDeliveryTitle,
+          delivery_info: categoryDeliveryInfo,
         });
         toast.success('Category updated successfully');
       } else {
@@ -471,6 +506,11 @@ const Categories = () => {
           discount_percentage: categoryDiscountOverrideEnabled
             ? Math.min(Math.max(Math.round(Number(categoryDiscountPercentage) || 0), 0), 100)
             : 0,
+          faqs_override_enabled: categoryFaqsOverrideEnabled,
+          faqs: categoryFaqs,
+          delivery_info_override_enabled: categoryDeliveryOverrideEnabled,
+          delivery_title: categoryDeliveryTitle,
+          delivery_info: categoryDeliveryInfo,
         });
         toast.success('Category created successfully');
       }
@@ -486,6 +526,11 @@ const Categories = () => {
       setCategoryHidden(false);
       setCategoryDiscountOverrideEnabled(false);
       setCategoryDiscountPercentage(0);
+      setCategoryFaqsOverrideEnabled(false);
+      setCategoryFaqs([]);
+      setCategoryDeliveryOverrideEnabled(false);
+      setCategoryDeliveryTitle('');
+      setCategoryDeliveryInfo('');
       await loadData();
     } catch {
       toast.error('Failed to save category');
@@ -635,6 +680,11 @@ const Categories = () => {
           discount_percentage: subCategoryFormData.discountOverrideEnabled
             ? Math.min(Math.max(Math.round(Number(subCategoryFormData.discountPercentage) || 0), 0), 100)
             : 0,
+          faqs_override_enabled: subCategoryFormData.faqsOverrideEnabled,
+          faqs: subCategoryFormData.faqs,
+          delivery_info_override_enabled: subCategoryFormData.deliveryOverrideEnabled,
+          delivery_title: subCategoryFormData.deliveryTitle,
+          delivery_info: subCategoryFormData.deliveryInfo,
           category: selectedCategoryId,
           additional_categories: subCategoryFormData.linkedCategoryIds.filter((id) => id !== selectedCategoryId),
         });
@@ -654,6 +704,11 @@ const Categories = () => {
           discount_percentage: subCategoryFormData.discountOverrideEnabled
             ? Math.min(Math.max(Math.round(Number(subCategoryFormData.discountPercentage) || 0), 0), 100)
             : 0,
+          faqs_override_enabled: subCategoryFormData.faqsOverrideEnabled,
+          faqs: subCategoryFormData.faqs,
+          delivery_info_override_enabled: subCategoryFormData.deliveryOverrideEnabled,
+          delivery_title: subCategoryFormData.deliveryTitle,
+          delivery_info: subCategoryFormData.deliveryInfo,
           category: selectedCategoryId,
           additional_categories: subCategoryFormData.linkedCategoryIds.filter((id) => id !== selectedCategoryId),
         });
@@ -1394,6 +1449,32 @@ const Categories = () => {
                 </p>
               </div>
 
+              <div className="rounded-md border border-input bg-muted/20 p-3 space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input type="checkbox" checked={categoryFaqsOverrideEnabled} onChange={(e) => setCategoryFaqsOverrideEnabled(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                  Override product FAQs for this category
+                </label>
+                {categoryFaqs.map((faq, index) => (
+                  <div key={index} className="grid gap-2 rounded border p-2">
+                    <Input disabled={!categoryFaqsOverrideEnabled} value={faq.question} placeholder="Question" onChange={(e) => setCategoryFaqs((items) => items.map((item, i) => i === index ? { ...item, question: e.target.value } : item))} />
+                    <textarea disabled={!categoryFaqsOverrideEnabled} value={faq.answer} rows={3} placeholder="Answer" onChange={(e) => setCategoryFaqs((items) => items.map((item, i) => i === index ? { ...item, answer: e.target.value } : item))} className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                    <Button type="button" variant="outline" size="sm" disabled={!categoryFaqsOverrideEnabled} onClick={() => setCategoryFaqs((items) => items.filter((_, i) => i !== index))}>Remove FAQ</Button>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" disabled={!categoryFaqsOverrideEnabled} onClick={() => setCategoryFaqs((items) => [...items, { question: '', answer: '' }])}>Add FAQ</Button>
+                <p className="text-xs text-muted-foreground">When checked, these FAQs replace each product's FAQs. Uncheck it to show each product's own FAQs again.</p>
+              </div>
+
+              <div className="rounded-md border border-input bg-muted/20 p-3 space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input type="checkbox" checked={categoryDeliveryOverrideEnabled} onChange={(e) => setCategoryDeliveryOverrideEnabled(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                  Override product delivery information for this category
+                </label>
+                <Input disabled={!categoryDeliveryOverrideEnabled} value={categoryDeliveryTitle} onChange={(e) => setCategoryDeliveryTitle(e.target.value)} placeholder="Delivery Information" />
+                <textarea disabled={!categoryDeliveryOverrideEnabled} value={categoryDeliveryInfo} onChange={(e) => setCategoryDeliveryInfo(e.target.value)} rows={5} placeholder="Delivery information" className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                <p className="text-xs text-muted-foreground">When checked, this replaces each product's delivery information. Uncheck it to show each product's own delivery information again.</p>
+              </div>
+
               <div className="flex justify-end gap-2 pt-4">
                 <Button variant="outline" onClick={() => setShowCategoryModal(false)}>Cancel</Button>
                 <Button onClick={handleSaveCategory}>
@@ -1979,6 +2060,32 @@ const Categories = () => {
                 <p className="text-xs text-muted-foreground">
                   When checked, this subcategory discount is shown on the storefront. Product form discounts will be overwritten.
                 </p>
+              </div>
+
+              <div className="rounded-md border border-input bg-muted/20 p-3 space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input type="checkbox" checked={subCategoryFormData.faqsOverrideEnabled} onChange={(e) => setSubCategoryFormData({ ...subCategoryFormData, faqsOverrideEnabled: e.target.checked })} className="h-4 w-4 rounded border-gray-300" />
+                  Override product FAQs for this subcategory
+                </label>
+                {subCategoryFormData.faqs.map((faq, index) => (
+                  <div key={index} className="grid gap-2 rounded border p-2">
+                    <Input disabled={!subCategoryFormData.faqsOverrideEnabled} value={faq.question} placeholder="Question" onChange={(e) => setSubCategoryFormData({ ...subCategoryFormData, faqs: subCategoryFormData.faqs.map((item, i) => i === index ? { ...item, question: e.target.value } : item) })} />
+                    <textarea disabled={!subCategoryFormData.faqsOverrideEnabled} value={faq.answer} rows={3} placeholder="Answer" onChange={(e) => setSubCategoryFormData({ ...subCategoryFormData, faqs: subCategoryFormData.faqs.map((item, i) => i === index ? { ...item, answer: e.target.value } : item) })} className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                    <Button type="button" variant="outline" size="sm" disabled={!subCategoryFormData.faqsOverrideEnabled} onClick={() => setSubCategoryFormData({ ...subCategoryFormData, faqs: subCategoryFormData.faqs.filter((_, i) => i !== index) })}>Remove FAQ</Button>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" disabled={!subCategoryFormData.faqsOverrideEnabled} onClick={() => setSubCategoryFormData({ ...subCategoryFormData, faqs: [...subCategoryFormData.faqs, { question: '', answer: '' }] })}>Add FAQ</Button>
+                <p className="text-xs text-muted-foreground">When checked, these FAQs replace each product's FAQs. Uncheck it to show each product's own FAQs again.</p>
+              </div>
+
+              <div className="rounded-md border border-input bg-muted/20 p-3 space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input type="checkbox" checked={subCategoryFormData.deliveryOverrideEnabled} onChange={(e) => setSubCategoryFormData({ ...subCategoryFormData, deliveryOverrideEnabled: e.target.checked })} className="h-4 w-4 rounded border-gray-300" />
+                  Override product delivery information for this subcategory
+                </label>
+                <Input disabled={!subCategoryFormData.deliveryOverrideEnabled} value={subCategoryFormData.deliveryTitle} onChange={(e) => setSubCategoryFormData({ ...subCategoryFormData, deliveryTitle: e.target.value })} placeholder="Delivery Information" />
+                <textarea disabled={!subCategoryFormData.deliveryOverrideEnabled} value={subCategoryFormData.deliveryInfo} onChange={(e) => setSubCategoryFormData({ ...subCategoryFormData, deliveryInfo: e.target.value })} rows={5} placeholder="Delivery information" className="flex min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                <p className="text-xs text-muted-foreground">When checked, this replaces each product's delivery information. Uncheck it to show each product's own delivery information again.</p>
               </div>
 
               <div className="grid gap-2">

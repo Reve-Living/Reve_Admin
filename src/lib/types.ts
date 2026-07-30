@@ -13,6 +13,11 @@ export interface Category {
   sort_order?: number;
   discount_override_enabled?: boolean;
   discount_percentage?: number;
+  faqs_override_enabled?: boolean;
+  faqs?: { question: string; answer: string }[];
+  delivery_info_override_enabled?: boolean;
+  delivery_info?: string;
+  delivery_title?: string;
   subcategories?: SubCategory[];
 }
 
@@ -35,6 +40,11 @@ export interface SubCategory {
   meta_description?: string;
   discount_override_enabled?: boolean;
   discount_percentage?: number;
+  faqs_override_enabled?: boolean;
+  faqs?: { question: string; answer: string }[];
+  delivery_info_override_enabled?: boolean;
+  delivery_info?: string;
+  delivery_title?: string;
 }
 
 export interface Collection {
