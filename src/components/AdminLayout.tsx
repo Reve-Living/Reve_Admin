@@ -14,6 +14,7 @@ import {
   Image,
   TicketPercent,
   BookOpen,
+  PackagePlus,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -26,6 +27,7 @@ const sidebarLinks = [
   { name: 'Lifestyle Content', href: '/lifestyle-content', icon: BookOpen },
   { name: 'Promotions', href: '/promotions', icon: TicketPercent },
   { name: 'Mattresses', href: '/mattresses', icon: Layers },
+  { name: 'Product Add-ons', href: '/product-addons', icon: PackagePlus },
   { name: 'Orders', href: '/orders', icon: ShoppingCart },
   { name: 'Reviews', href: '/reviews', icon: Star },
   { name: 'Delivery & Returns', href: '/policies', icon: Truck },

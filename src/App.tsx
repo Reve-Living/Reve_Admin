@@ -16,6 +16,7 @@ import HeroSlides from './pages/HeroSlides';
 import Mattresses from './pages/Mattresses';
 import Promotions from './pages/Promotions';
 import LifestyleContent from './pages/LifestyleContent';
+import ProductAddons from './pages/ProductAddons';
 import { Toaster } from 'sonner';
 
 function App() {
@@ -51,6 +52,7 @@ function App() {
           <Route path="/collections" element={<Collections />} />
           <Route path="/filters" element={<Filters />} />
           <Route path="/mattresses" element={<Mattresses />} />
+          <Route path="/product-addons" element={<ProductAddons />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/reviews" element={<Reviews />} />
           <Route path="/policies" element={<Policies />} />
