@@ -1,4 +1,4 @@
-﻿import { zodResolver } from '@hookform/resolvers/zod';
+import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -168,6 +168,18 @@ const productSchema = z.object({
     slug: z.string().optional(),
     meta_title: z.string().optional(),
     meta_description: z.string().optional(),
+    google_feed_brand: z.string().optional(),
+    google_feed_color: z.string().optional(),
+    google_feed_material: z.string().optional(),
+    google_feed_fabric_type: z.string().optional(),
+    google_feed_frame_material: z.string().optional(),
+    google_feed_headboard_material: z.string().optional(),
+    google_feed_number_of_drawers: z.string().optional(),
+    google_feed_depth: z.string().optional(),
+    google_feed_length: z.string().optional(),
+    google_feed_width: z.string().optional(),
+    google_feed_height: z.string().optional(),
+    google_feed_seat_height: z.string().optional(),
     short_description: z.string().min(1, 'Short description is required'),
     description: z.string().min(1, 'Long description is required'),
     category: z.number().min(1, 'Category is required'),
@@ -671,6 +683,18 @@ const ProductForm = () => {
       slug: '',
       meta_title: '',
       meta_description: '',
+      google_feed_brand: '',
+      google_feed_color: '',
+      google_feed_material: '',
+      google_feed_fabric_type: '',
+      google_feed_frame_material: '',
+      google_feed_headboard_material: '',
+      google_feed_number_of_drawers: '',
+      google_feed_depth: '',
+      google_feed_length: '',
+      google_feed_width: '',
+      google_feed_height: '',
+      google_feed_seat_height: '',
       images: [],
       videos: [],
       colors: [],
@@ -1212,6 +1236,18 @@ const ProductForm = () => {
         setValue('slug', product.slug || '');
         setValue('meta_title', product.meta_title || '');
         setValue('meta_description', product.meta_description || '');
+        setValue('google_feed_brand', product.google_feed_brand || '');
+        setValue('google_feed_color', product.google_feed_color || '');
+        setValue('google_feed_material', product.google_feed_material || '');
+        setValue('google_feed_fabric_type', product.google_feed_fabric_type || '');
+        setValue('google_feed_frame_material', product.google_feed_frame_material || '');
+        setValue('google_feed_headboard_material', product.google_feed_headboard_material || '');
+        setValue('google_feed_number_of_drawers', product.google_feed_number_of_drawers || '');
+        setValue('google_feed_depth', product.google_feed_depth || '');
+        setValue('google_feed_length', product.google_feed_length || '');
+        setValue('google_feed_width', product.google_feed_width || '');
+        setValue('google_feed_height', product.google_feed_height || '');
+        setValue('google_feed_seat_height', product.google_feed_seat_height || '');
         const images = [...product.images]
           .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) || (a.id || 0) - (b.id || 0))
           .map((i, index) => ({
@@ -1931,6 +1967,18 @@ const ProductForm = () => {
         slug: (data.slug || '').trim(),
         meta_title: (data.meta_title || '').trim(),
         meta_description: (data.meta_description || '').trim(),
+        google_feed_brand: (data.google_feed_brand || '').trim(),
+        google_feed_color: (data.google_feed_color || '').trim(),
+        google_feed_material: (data.google_feed_material || '').trim(),
+        google_feed_fabric_type: (data.google_feed_fabric_type || '').trim(),
+        google_feed_frame_material: (data.google_feed_frame_material || '').trim(),
+        google_feed_headboard_material: (data.google_feed_headboard_material || '').trim(),
+        google_feed_number_of_drawers: (data.google_feed_number_of_drawers || '').trim(),
+        google_feed_depth: (data.google_feed_depth || '').trim(),
+        google_feed_length: (data.google_feed_length || '').trim(),
+        google_feed_width: (data.google_feed_width || '').trim(),
+        google_feed_height: (data.google_feed_height || '').trim(),
+        google_feed_seat_height: (data.google_feed_seat_height || '').trim(),
         category: normalizedCategory,
         subcategory: normalizedSubcategory,
         price: Number.isFinite(data.price) ? data.price : 0,
@@ -2377,6 +2425,64 @@ const ProductForm = () => {
                   value={computedOriginalPriceDisplay}
                   readOnly
                 />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Google Merchant Feed Details</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Brand</label>
+                <Input {...register('google_feed_brand')} placeholder="e.g. Reve Living" />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Colour</label>
+                <Input {...register('google_feed_color')} placeholder="e.g. Dark Grey" />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Material</label>
+                <Input {...register('google_feed_material')} placeholder="e.g. Fabric" />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Fabric Type</label>
+                <Input {...register('google_feed_fabric_type')} placeholder="e.g. Aire Leather" />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Frame Material</label>
+                <Input {...register('google_feed_frame_material')} placeholder="e.g. Metal" />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Headboard Material</label>
+                <Input {...register('google_feed_headboard_material')} placeholder="e.g. Plush Velvet" />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Number of Drawers</label>
+                <Input {...register('google_feed_number_of_drawers')} placeholder="e.g. 0" />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Depth</label>
+                <Input {...register('google_feed_depth')} placeholder="e.g. 90 cm" />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Length</label>
+                <Input {...register('google_feed_length')} placeholder="e.g. 205 cm" />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Width</label>
+                <Input {...register('google_feed_width')} placeholder="e.g. 152 cm" />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Height</label>
+                <Input {...register('google_feed_height')} placeholder="e.g. 102 cm" />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Seat Height</label>
+                <Input {...register('google_feed_seat_height')} placeholder="e.g. 48 cm" />
               </div>
             </div>
           </CardContent>
