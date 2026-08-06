@@ -22,6 +22,8 @@ const resolveApiBaseUrl = () => {
 const API_BASE_URL = resolveApiBaseUrl();
 
 const getAuthToken = () => localStorage.getItem("admin_token");
+const getRefreshToken = () => localStorage.getItem("admin_refresh");
+let refreshInFlight: Promise<string | null> | null = null;
 const mutationInFlight = new Map<string, Promise<unknown>>();
 const getCache = new Map<string, { ts: number; data: unknown }>();
 const getInFlight = new Map<string, Promise<unknown>>();
@@ -89,6 +91,73 @@ const buildHeaders = (hasBody: boolean) => {
   return headers;
 };
 
+const clearAuthSession = () => {
+  localStorage.removeItem("admin_token");
+  localStorage.removeItem("admin_refresh");
+  localStorage.removeItem("isLoggedIn");
+};
+
+const refreshAccessToken = async (): Promise<string | null> => {
+  const refresh = getRefreshToken();
+  if (!refresh) {
+    clearAuthSession();
+    return null;
+  }
+
+  if (!refreshInFlight) {
+    refreshInFlight = fetch(`${API_BASE_URL}/token/refresh/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh }),
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          clearAuthSession();
+          return null;
+        }
+        const payload = await res.json();
+        const access = typeof payload?.access === "string" ? payload.access : "";
+        if (!access) {
+          clearAuthSession();
+          return null;
+        }
+        localStorage.setItem("admin_token", access);
+        if (typeof payload?.refresh === "string" && payload.refresh) {
+          localStorage.setItem("admin_refresh", payload.refresh);
+        }
+        localStorage.setItem("isLoggedIn", "true");
+        return access;
+      })
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+
+  return refreshInFlight;
+};
+
+const shouldRetryWithFreshToken = (path: string, status: number) =>
+  (status === 401 || status === 403) && !path.startsWith("/login/") && !path.startsWith("/token/refresh/");
+
+const fetchWithAuthRetry = async (path: string, init: RequestInit): Promise<Response> => {
+  const res = await fetch(`${API_BASE_URL}${path}`, init);
+  if (!shouldRetryWithFreshToken(path, res.status)) {
+    return res;
+  }
+
+  const refreshedToken = await refreshAccessToken();
+  if (!refreshedToken) {
+    return res;
+  }
+
+  const retryHeaders = new Headers(init.headers);
+  retryHeaders.set("Authorization", `Bearer ${refreshedToken}`);
+  return fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    headers: retryHeaders,
+  });
+};
+
 const runMutation = async <T>(
   method: "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
@@ -100,7 +169,7 @@ const runMutation = async <T>(
     return existing as Promise<T>;
   }
 
-  const request = fetch(`${API_BASE_URL}${path}`, {
+  const request = fetchWithAuthRetry(path, {
     method,
     headers: buildHeaders(body !== undefined),
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -137,7 +206,7 @@ export const apiGet = async <T>(path: string, options: ApiGetOptions = {}): Prom
     return cloneData((await existing) as T);
   }
 
-  const request = fetch(`${API_BASE_URL}${path}`, {
+  const request = fetchWithAuthRetry(path, {
     headers: buildHeaders(false),
     cache: "no-store",
   })
@@ -188,7 +257,7 @@ export const apiUpload = async (
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetchWithAuthRetry(path, {
     method: "POST",
     headers: headers,
     body: formData,
@@ -213,7 +282,7 @@ export const apiUpload = async (
 };
 
 export const apiDownload = async (path: string): Promise<Blob> => {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetchWithAuthRetry(path, {
     headers: buildHeaders(false),
   });
   if (!res.ok) {
