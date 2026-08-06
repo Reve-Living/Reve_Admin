@@ -170,6 +170,8 @@ const productSchema = z.object({
     meta_description: z.string().optional(),
     google_feed_brand: z.string().optional(),
     google_feed_sku: z.string().optional(),
+    google_feed_mpn: z.string().optional(),
+    google_feed_gtin: z.string().optional(),
     google_feed_special_feature: z.string().optional(),
     google_feed_color: z.string().optional(),
     google_feed_material: z.string().optional(),
@@ -189,6 +191,8 @@ const productSchema = z.object({
           fabric: z.string().optional(),
           size: z.string().optional(),
           sku: z.string().optional(),
+          mpn: z.string().optional(),
+          gtin: z.string().optional(),
           price: z.union([z.string(), z.number()]).optional(),
         })
       )
@@ -698,6 +702,8 @@ const ProductForm = () => {
       meta_description: '',
       google_feed_brand: '',
       google_feed_sku: '',
+      google_feed_mpn: '',
+      google_feed_gtin: '',
       google_feed_special_feature: '',
       google_feed_color: '',
       google_feed_material: '',
@@ -1264,6 +1270,8 @@ const ProductForm = () => {
         setValue('meta_description', product.meta_description || '');
         setValue('google_feed_brand', product.google_feed_brand || '');
         setValue('google_feed_sku', product.google_feed_sku || '');
+        setValue('google_feed_mpn', product.google_feed_mpn || '');
+        setValue('google_feed_gtin', product.google_feed_gtin || '');
         setValue('google_feed_special_feature', product.google_feed_special_feature || '');
         setValue('google_feed_color', product.google_feed_color || '');
         setValue('google_feed_material', product.google_feed_material || '');
@@ -1281,6 +1289,8 @@ const ProductForm = () => {
           fabric: String(variant?.fabric || ''),
           size: String(variant?.size || ''),
           sku: String(variant?.sku || ''),
+          mpn: String(variant?.mpn || ''),
+          gtin: String(variant?.gtin || ''),
           price: variant?.price !== undefined && variant?.price !== null ? String(variant.price) : '',
         }));
         setValue('google_feed_variants', googleFeedVariants);
@@ -2006,6 +2016,8 @@ const ProductForm = () => {
         meta_description: (data.meta_description || '').trim(),
         google_feed_brand: (data.google_feed_brand || '').trim(),
         google_feed_sku: (data.google_feed_sku || '').trim(),
+        google_feed_mpn: (data.google_feed_mpn || '').trim(),
+        google_feed_gtin: (data.google_feed_gtin || '').trim(),
         google_feed_special_feature: (data.google_feed_special_feature || '').trim(),
         google_feed_color: (data.google_feed_color || '').trim(),
         google_feed_material: (data.google_feed_material || '').trim(),
@@ -2024,9 +2036,11 @@ const ProductForm = () => {
             fabric: (variant?.fabric || '').trim(),
             size: (variant?.size || '').trim(),
             sku: (variant?.sku || '').trim(),
+            mpn: (variant?.mpn || '').trim(),
+            gtin: (variant?.gtin || '').trim(),
             price: String(variant?.price ?? '').trim(),
           }))
-          .filter((variant) => variant.color || variant.fabric || variant.size || variant.sku || variant.price),
+          .filter((variant) => variant.color || variant.fabric || variant.size || variant.sku || variant.mpn || variant.gtin || variant.price),
         category: normalizedCategory,
         subcategory: normalizedSubcategory,
         price: Number.isFinite(data.price) ? data.price : 0,
@@ -2493,6 +2507,14 @@ const ProductForm = () => {
                 <Input {...register('google_feed_sku')} placeholder="e.g. REV-TV-160-WHT" />
               </div>
               <div className="grid gap-2">
+                <label className="text-sm font-medium">MPN</label>
+                <Input {...register('google_feed_mpn')} placeholder="e.g. REV-TV-160-WHT-MPN" />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">GTIN</label>
+                <Input {...register('google_feed_gtin')} placeholder="e.g. 05012345678910" />
+              </div>
+              <div className="grid gap-2">
                 <label className="text-sm font-medium">Special Feature</label>
                 <Input {...register('google_feed_special_feature')} placeholder="e.g. Storage, Trundle, Drawers" />
               </div>
@@ -2548,7 +2570,7 @@ const ProductForm = () => {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => appendGoogleFeedVariant({ color: '', fabric: '', size: '', sku: '', price: '' })}
+                  onClick={() => appendGoogleFeedVariant({ color: '', fabric: '', size: '', sku: '', mpn: '', gtin: '', price: '' })}
                 >
                   <Plus className="h-4 w-4 mr-2" /> Add Variant
                 </Button>
@@ -2565,7 +2587,7 @@ const ProductForm = () => {
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                      <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
                         <div className="grid gap-1">
                           <label className="text-xs text-muted-foreground">Colour</label>
                           <Input {...register(`google_feed_variants.${index}.color` as const)} placeholder="White" />
@@ -2581,6 +2603,14 @@ const ProductForm = () => {
                         <div className="grid gap-1">
                           <label className="text-xs text-muted-foreground">SKU</label>
                           <Input {...register(`google_feed_variants.${index}.sku` as const)} placeholder="REV-001-WHT-S" />
+                        </div>
+                        <div className="grid gap-1">
+                          <label className="text-xs text-muted-foreground">MPN</label>
+                          <Input {...register(`google_feed_variants.${index}.mpn` as const)} placeholder="REV-001-WHT-S-MPN" />
+                        </div>
+                        <div className="grid gap-1">
+                          <label className="text-xs text-muted-foreground">GTIN</label>
+                          <Input {...register(`google_feed_variants.${index}.gtin` as const)} placeholder="05012345678910" />
                         </div>
                         <div className="grid gap-1">
                           <label className="text-xs text-muted-foreground">Price</label>
