@@ -44,19 +44,18 @@ const Dashboard = () => {
 
   const cards = useMemo(() => {
     const totals = data?.totals;
-    const monthly = data?.monthly;
     return [
       {
         title: 'Total Revenue',
         value: totals ? GBP.format(totals.revenue) : '—',
-        change: monthly?.revenue.change_percent ?? null,
+        change: null,
         icon: TrendingUp,
         color: 'text-green-600',
       },
       {
         title: 'Total Orders',
         value: totals ? totals.orders.toLocaleString() : '—',
-        change: monthly?.orders.change_percent ?? null,
+        change: null,
         icon: ShoppingCart,
         color: 'text-blue-600',
       },
