@@ -282,6 +282,8 @@ export interface Product {
   meta_description?: string;
   google_feed_brand?: string;
   google_feed_sku?: string;
+  google_feed_mpn?: string;
+  google_feed_gtin?: string;
   google_feed_special_feature?: string;
   google_feed_color?: string;
   google_feed_material?: string;
@@ -299,6 +301,8 @@ export interface Product {
     fabric?: string;
     size?: string;
     sku?: string;
+    mpn?: string;
+    gtin?: string;
     price?: string | number;
   }[];
   category: number;
