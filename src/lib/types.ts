@@ -281,6 +281,8 @@ export interface Product {
   meta_title?: string;
   meta_description?: string;
   google_feed_brand?: string;
+  google_feed_sku?: string;
+  google_feed_special_feature?: string;
   google_feed_color?: string;
   google_feed_material?: string;
   google_feed_fabric_type?: string;
@@ -292,6 +294,13 @@ export interface Product {
   google_feed_width?: string;
   google_feed_height?: string;
   google_feed_seat_height?: string;
+  google_feed_variants?: {
+    color?: string;
+    fabric?: string;
+    size?: string;
+    sku?: string;
+    price?: string | number;
+  }[];
   category: number;
   // Some endpoints return the category/subcategory slugs instead of IDs; keep both for filtering.
   category_slug?: string;
