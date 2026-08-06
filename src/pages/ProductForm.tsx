@@ -169,6 +169,8 @@ const productSchema = z.object({
     meta_title: z.string().optional(),
     meta_description: z.string().optional(),
     google_feed_brand: z.string().optional(),
+    google_feed_sku: z.string().optional(),
+    google_feed_special_feature: z.string().optional(),
     google_feed_color: z.string().optional(),
     google_feed_material: z.string().optional(),
     google_feed_fabric_type: z.string().optional(),
@@ -180,6 +182,17 @@ const productSchema = z.object({
     google_feed_width: z.string().optional(),
     google_feed_height: z.string().optional(),
     google_feed_seat_height: z.string().optional(),
+    google_feed_variants: z
+      .array(
+        z.object({
+          color: z.string().optional(),
+          fabric: z.string().optional(),
+          size: z.string().optional(),
+          sku: z.string().optional(),
+          price: z.union([z.string(), z.number()]).optional(),
+        })
+      )
+      .optional(),
     short_description: z.string().min(1, 'Short description is required'),
     description: z.string().min(1, 'Long description is required'),
     category: z.number().min(1, 'Category is required'),
@@ -684,6 +697,8 @@ const ProductForm = () => {
       meta_title: '',
       meta_description: '',
       google_feed_brand: '',
+      google_feed_sku: '',
+      google_feed_special_feature: '',
       google_feed_color: '',
       google_feed_material: '',
       google_feed_fabric_type: '',
@@ -695,6 +710,7 @@ const ProductForm = () => {
       google_feed_width: '',
       google_feed_height: '',
       google_feed_seat_height: '',
+      google_feed_variants: [],
       images: [],
       videos: [],
       colors: [],
@@ -1038,6 +1054,16 @@ const ProductForm = () => {
     name: "dimension_images",
   });
 
+  const {
+    fields: googleFeedVariantFields,
+    append: appendGoogleFeedVariant,
+    remove: removeGoogleFeedVariant,
+    replace: replaceGoogleFeedVariants,
+  } = useFieldArray({
+    control,
+    name: "google_feed_variants",
+  });
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -1237,6 +1263,8 @@ const ProductForm = () => {
         setValue('meta_title', product.meta_title || '');
         setValue('meta_description', product.meta_description || '');
         setValue('google_feed_brand', product.google_feed_brand || '');
+        setValue('google_feed_sku', product.google_feed_sku || '');
+        setValue('google_feed_special_feature', product.google_feed_special_feature || '');
         setValue('google_feed_color', product.google_feed_color || '');
         setValue('google_feed_material', product.google_feed_material || '');
         setValue('google_feed_fabric_type', product.google_feed_fabric_type || '');
@@ -1248,6 +1276,15 @@ const ProductForm = () => {
         setValue('google_feed_width', product.google_feed_width || '');
         setValue('google_feed_height', product.google_feed_height || '');
         setValue('google_feed_seat_height', product.google_feed_seat_height || '');
+        const googleFeedVariants = (product.google_feed_variants || []).map((variant) => ({
+          color: String(variant?.color || ''),
+          fabric: String(variant?.fabric || ''),
+          size: String(variant?.size || ''),
+          sku: String(variant?.sku || ''),
+          price: variant?.price !== undefined && variant?.price !== null ? String(variant.price) : '',
+        }));
+        setValue('google_feed_variants', googleFeedVariants);
+        replaceGoogleFeedVariants(googleFeedVariants);
         const images = [...product.images]
           .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) || (a.id || 0) - (b.id || 0))
           .map((i, index) => ({
@@ -1397,7 +1434,7 @@ const ProductForm = () => {
       }
     };
     loadProduct();
-  }, [id, categories, subcategories, autoRevealOnSave, setValue, replaceImages, replaceVideos, replaceColors, replaceSizes, replaceStyles, replaceFabrics, replaceFaqs, replaceDimensions, replaceInfoSections, replaceFilterValues]);
+  }, [id, categories, subcategories, autoRevealOnSave, setValue, replaceImages, replaceVideos, replaceColors, replaceSizes, replaceStyles, replaceFabrics, replaceFaqs, replaceDimensions, replaceInfoSections, replaceFilterValues, replaceGoogleFeedVariants]);
 
   useEffect(() => {
     const categoryId = Number(selectedCategory || 0);
@@ -1968,6 +2005,8 @@ const ProductForm = () => {
         meta_title: (data.meta_title || '').trim(),
         meta_description: (data.meta_description || '').trim(),
         google_feed_brand: (data.google_feed_brand || '').trim(),
+        google_feed_sku: (data.google_feed_sku || '').trim(),
+        google_feed_special_feature: (data.google_feed_special_feature || '').trim(),
         google_feed_color: (data.google_feed_color || '').trim(),
         google_feed_material: (data.google_feed_material || '').trim(),
         google_feed_fabric_type: (data.google_feed_fabric_type || '').trim(),
@@ -1979,6 +2018,15 @@ const ProductForm = () => {
         google_feed_width: (data.google_feed_width || '').trim(),
         google_feed_height: (data.google_feed_height || '').trim(),
         google_feed_seat_height: (data.google_feed_seat_height || '').trim(),
+        google_feed_variants: (data.google_feed_variants || [])
+          .map((variant) => ({
+            color: (variant?.color || '').trim(),
+            fabric: (variant?.fabric || '').trim(),
+            size: (variant?.size || '').trim(),
+            sku: (variant?.sku || '').trim(),
+            price: String(variant?.price ?? '').trim(),
+          }))
+          .filter((variant) => variant.color || variant.fabric || variant.size || variant.sku || variant.price),
         category: normalizedCategory,
         subcategory: normalizedSubcategory,
         price: Number.isFinite(data.price) ? data.price : 0,
@@ -2441,6 +2489,14 @@ const ProductForm = () => {
                 <Input {...register('google_feed_brand')} placeholder="e.g. Reve Living" />
               </div>
               <div className="grid gap-2">
+                <label className="text-sm font-medium">SKU</label>
+                <Input {...register('google_feed_sku')} placeholder="e.g. REV-TV-160-WHT" />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">Special Feature</label>
+                <Input {...register('google_feed_special_feature')} placeholder="e.g. Storage, Trundle, Drawers" />
+              </div>
+              <div className="grid gap-2">
                 <label className="text-sm font-medium">Colour</label>
                 <Input {...register('google_feed_color')} placeholder="e.g. Dark Grey" />
               </div>
@@ -2484,6 +2540,57 @@ const ProductForm = () => {
                 <label className="text-sm font-medium">Seat Height</label>
                 <Input {...register('google_feed_seat_height')} placeholder="e.g. 48 cm" />
               </div>
+            </div>
+            <div className="space-y-3 rounded-md border border-border/70 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-medium">Variants</h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => appendGoogleFeedVariant({ color: '', fabric: '', size: '', sku: '', price: '' })}
+                >
+                  <Plus className="h-4 w-4 mr-2" /> Add Variant
+                </Button>
+              </div>
+              {googleFeedVariantFields.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Add rows only when Google needs separate colour, fabric, or size variants.</p>
+              ) : (
+                <div className="space-y-3">
+                  {googleFeedVariantFields.map((field, index) => (
+                    <div key={field.id} className="rounded-md border border-border/70 p-3">
+                      <div className="mb-3 flex items-center justify-between">
+                        <span className="text-sm font-medium">Variant {index + 1}</span>
+                        <Button type="button" variant="ghost" size="icon" onClick={() => removeGoogleFeedVariant(index)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                        <div className="grid gap-1">
+                          <label className="text-xs text-muted-foreground">Colour</label>
+                          <Input {...register(`google_feed_variants.${index}.color` as const)} placeholder="White" />
+                        </div>
+                        <div className="grid gap-1">
+                          <label className="text-xs text-muted-foreground">Fabric</label>
+                          <Input {...register(`google_feed_variants.${index}.fabric` as const)} placeholder="Plush Velvet" />
+                        </div>
+                        <div className="grid gap-1">
+                          <label className="text-xs text-muted-foreground">Size</label>
+                          <Input {...register(`google_feed_variants.${index}.size` as const)} placeholder="Single" />
+                        </div>
+                        <div className="grid gap-1">
+                          <label className="text-xs text-muted-foreground">SKU</label>
+                          <Input {...register(`google_feed_variants.${index}.sku` as const)} placeholder="REV-001-WHT-S" />
+                        </div>
+                        <div className="grid gap-1">
+                          <label className="text-xs text-muted-foreground">Price</label>
+                          <Input {...register(`google_feed_variants.${index}.price` as const)} placeholder="399.00" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
