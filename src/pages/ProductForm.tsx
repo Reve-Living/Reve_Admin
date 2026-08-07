@@ -843,7 +843,7 @@ const ProductForm = () => {
     const query = suggestionSearch.trim().toLowerCase();
     const editingId = Number(id || 0);
 
-    return (importProductOptions || []).filter((product) => {
+    const matchingProducts = (importProductOptions || []).filter((product) => {
       if (editingId > 0 && product.id === editingId) return false;
       if (suggestionCategoryFilter !== 'all') {
         const productCategoryId = resolveCategoryId(product, categories);
@@ -868,6 +868,25 @@ const ProductForm = () => {
 
       return haystack.includes(query);
     });
+
+    // Kids Beds can contain an original category product plus a linked
+    // subcategory import copy. Show that pair once in this picker only.
+    const logicalProducts = new Map<string, Product>();
+    matchingProducts.forEach((product) => {
+      const isKidsBeds =
+        product.category_slug === 'kids-beds' ||
+        (product.category_name || '').trim().toLowerCase() === 'kids beds';
+      const logicalKey = isKidsBeds
+        ? `kids-beds:${Number(product.imported_from_product || product.id)}`
+        : `product:${product.id}`;
+      const existing = logicalProducts.get(logicalKey);
+
+      if (!existing || (!product.imported_from_product && existing.imported_from_product)) {
+        logicalProducts.set(logicalKey, product);
+      }
+    });
+
+    return Array.from(logicalProducts.values());
   }, [
     categories,
     id,
@@ -1083,7 +1102,7 @@ const ProductForm = () => {
         setSubcategories(subs);
 
         const [products, filters, options, mattresses] = await Promise.all([
-          apiGet<Product[]>('/products/?admin_picker=1'),
+          apiGet<Product[]>('/products/?admin_summary=1'),
           apiGet<FilterType[]>('/filter-types/'),
           apiGet<FilterOption[]>('/filter-options/'),
           apiGet<ProductMattress[]>('/mattress-options/'),
