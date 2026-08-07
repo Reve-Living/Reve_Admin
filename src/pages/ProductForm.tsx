@@ -869,11 +869,16 @@ const ProductForm = () => {
       return haystack.includes(query);
     });
 
-    // Placement copies represent the same logical product. Products created
-    // with the manual Duplicate button have no import link and remain separate.
+    // Collapse only unchanged placement copies. Renamed imported products and
+    // products created with the manual Duplicate button remain separate.
     const logicalProducts = new Map<string, Product>();
+    const productById = new Map(importProductOptions.map((product) => [Number(product.id), product]));
     matchingProducts.forEach((product) => {
-      const logicalKey = `product:${Number(product.imported_from_product || product.id)}`;
+      const source = productById.get(Number(product.imported_from_product || 0));
+      const normalizedName = (product.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const normalizedSourceName = (source?.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const isUnchangedPlacementCopy = Boolean(source && normalizedName && normalizedName === normalizedSourceName);
+      const logicalKey = `product:${isUnchangedPlacementCopy ? source!.id : product.id}`;
       const existing = logicalProducts.get(logicalKey);
 
       if (!existing || (!product.imported_from_product && existing.imported_from_product)) {

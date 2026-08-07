@@ -321,8 +321,13 @@ const Products = () => {
     });
 
     const visibleProducts = new Map<string, Product>();
+    const productById = new Map(products.map((product) => [Number(product.id), product]));
     matchingProducts.forEach((product) => {
-      const displayKey = `product:${Number(product.imported_from_product || product.id)}`;
+      const source = productById.get(Number(product.imported_from_product || 0));
+      const normalizedName = (product.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const normalizedSourceName = (source?.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const isUnchangedPlacementCopy = Boolean(source && normalizedName && normalizedName === normalizedSourceName);
+      const displayKey = `product:${isUnchangedPlacementCopy ? source!.id : product.id}`;
       const existing = visibleProducts.get(displayKey);
 
       if (
