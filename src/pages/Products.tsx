@@ -272,8 +272,7 @@ const Products = () => {
     const targetSubcategoryId = targetSubcategory?.id;
     const targetSubcategoryName = (targetSubcategory?.name || '').toLowerCase();
 
-    return products
-      .filter((product) => {
+    const matchingProducts = products.filter((product) => {
       const productCategorySlug = (product.category_slug || '').toLowerCase();
       const productCategoryId = Number(product.category);
       const productCategoryName = (product.category_name || '').toLowerCase();
@@ -318,8 +317,30 @@ const Products = () => {
           .toLowerCase()
           .includes(normalizedSearch);
 
-        return matchesCategory && matchesSubcategory && matchesSearch;
-      })
+      return matchesCategory && matchesSubcategory && matchesSearch;
+    });
+
+    const visibleProducts = new Map<string, Product>();
+    matchingProducts.forEach((product) => {
+      const isKidsBeds =
+        (product.category_slug || '').toLowerCase() === 'kids-beds' ||
+        (product.category_name || '').trim().toLowerCase() === 'kids beds';
+      const normalizedName = (product.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+      const displayKey = isKidsBeds && normalizedName
+        ? `kids-beds:${normalizedName}`
+        : `product:${product.id}`;
+      const existing = visibleProducts.get(displayKey);
+
+      if (
+        !existing ||
+        (Boolean(existing.imported_from_product) && !product.imported_from_product) ||
+        (Boolean(existing.imported_from_product) === Boolean(product.imported_from_product) && product.id < existing.id)
+      ) {
+        visibleProducts.set(displayKey, product);
+      }
+    });
+
+    return Array.from(visibleProducts.values())
       .sort((a, b) => {
         const aCategory = categoryOrderLookup.get(Number(a.category));
         const bCategory = categoryOrderLookup.get(Number(b.category));
