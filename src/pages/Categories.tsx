@@ -117,6 +117,8 @@ const Categories = () => {
   const [categoryDeliveryTitle, setCategoryDeliveryTitle] = useState('');
   const [categoryDeliveryInfo, setCategoryDeliveryInfo] = useState('');
   const [subCategoryProductSearch, setSubCategoryProductSearch] = useState('');
+  const [productCategoryFilter, setProductCategoryFilter] = useState('');
+  const [productSubcategoryFilter, setProductSubcategoryFilter] = useState('');
   const [subCategoryFormData, setSubCategoryFormData] = useState({
     name: '',
     slug: '',
@@ -254,6 +256,8 @@ const Categories = () => {
 
   const openSubCategoryModal = (categoryId: number, subCategory?: SubCategory) => {
     setSubCategoryProductSearch('');
+    setProductCategoryFilter('');
+    setProductSubcategoryFilter('');
     if (subCategory) {
       setSelectedCategoryId(subCategory.category);
       setEditingSubCategory(subCategory);
@@ -993,9 +997,37 @@ const Categories = () => {
     });
   }, [editingSubCategory, products]);
 
+  const productFilterSubcategories = useMemo(() => {
+    const categoryId = Number(productCategoryFilter || 0);
+    const availableSubcategoryIds = new Set(
+      subcategoryProducts
+        .filter((product) => !categoryId || Number(product.category) === categoryId)
+        .map((product) => Number(product.subcategory || 0))
+        .filter(Boolean)
+    );
+
+    const uniqueSubcategories = new Map<number, SubCategory>();
+    categories
+      .flatMap((category) => category.subcategories || [])
+      .filter((subcategory) => availableSubcategoryIds.has(subcategory.id))
+      .forEach((subcategory) => uniqueSubcategories.set(subcategory.id, subcategory));
+
+    return Array.from(uniqueSubcategories.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [categories, productCategoryFilter, subcategoryProducts]);
+
   const filteredSubcategoryProducts = useMemo(
-    () => subcategoryProducts.filter((product) => matchesProductPickerSearch(product, subCategoryProductSearch)),
-    [subcategoryProducts, subCategoryProductSearch]
+    () => {
+      const categoryId = Number(productCategoryFilter || 0);
+      const subcategoryId = Number(productSubcategoryFilter || 0);
+
+      return subcategoryProducts.filter(
+        (product) =>
+          (!categoryId || Number(product.category) === categoryId) &&
+          (!subcategoryId || Number(product.subcategory) === subcategoryId) &&
+          matchesProductPickerSearch(product, subCategoryProductSearch)
+      );
+    },
+    [subcategoryProducts, subCategoryProductSearch, productCategoryFilter, productSubcategoryFilter]
   );
 
   const handleUploadImage = async (file?: File) => {
@@ -2151,6 +2183,37 @@ const Categories = () => {
 
               <div className="grid gap-2">
                 <label className="text-sm font-medium">Select Products</label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <select
+                    value={productCategoryFilter}
+                    onChange={(e) => {
+                      setProductCategoryFilter(e.target.value);
+                      setProductSubcategoryFilter('');
+                    }}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Filter products by category"
+                  >
+                    <option value="">All categories</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={productSubcategoryFilter}
+                    onChange={(e) => setProductSubcategoryFilter(e.target.value)}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Filter products by subcategory"
+                  >
+                    <option value="">All subcategories</option>
+                    {productFilterSubcategories.map((subcategory) => (
+                      <option key={subcategory.id} value={subcategory.id}>
+                        {subcategory.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <Input
                   value={subCategoryProductSearch}
                   onChange={(e) => setSubCategoryProductSearch(e.target.value)}
@@ -2172,7 +2235,7 @@ const Categories = () => {
                     </label>
                   ))}
                   {filteredSubcategoryProducts.length === 0 && (
-                    <p className="p-2 text-sm text-muted-foreground">No products match that search.</p>
+                    <p className="p-2 text-sm text-muted-foreground">No products match the selected filters.</p>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
