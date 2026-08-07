@@ -322,13 +322,7 @@ const Products = () => {
 
     const visibleProducts = new Map<string, Product>();
     matchingProducts.forEach((product) => {
-      const isKidsBeds =
-        (product.category_slug || '').toLowerCase() === 'kids-beds' ||
-        (product.category_name || '').trim().toLowerCase() === 'kids beds';
-      const normalizedName = (product.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
-      const displayKey = isKidsBeds && normalizedName
-        ? `kids-beds:${normalizedName}`
-        : `product:${product.id}`;
+      const displayKey = `product:${Number(product.imported_from_product || product.id)}`;
       const existing = visibleProducts.get(displayKey);
 
       if (
