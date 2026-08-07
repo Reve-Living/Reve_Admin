@@ -171,6 +171,9 @@ const getStatusLabel = (status: string) => {
   return status;
 };
 
+const isDeliveredOrder = (order?: Pick<Order, 'status'> | null) =>
+  ['delivered', 'shipped'].includes((order?.status || '').toLowerCase());
+
 const getStatusBadgeClassName = (status: string) => {
   switch ((status || '').toLowerCase()) {
     case 'paid':
@@ -1330,13 +1333,15 @@ const Orders = () => {
                 <Button variant="outline" onClick={() => void startEditingOrder(selectedOrder.id)}>
                   <Edit className="mr-2 h-4 w-4" /> Edit
                 </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => void updateStatus(selectedOrder.id, 'mark_cancelled')}
-                  disabled={getCancelActionState(selectedOrder).disabled}
-                >
-                  <XCircle className="mr-2 h-4 w-4" /> {getCancelActionState(selectedOrder).label}
-                </Button>
+                {!isDeliveredOrder(selectedOrder) && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => void updateStatus(selectedOrder.id, 'mark_cancelled')}
+                    disabled={getCancelActionState(selectedOrder).disabled}
+                  >
+                    <XCircle className="mr-2 h-4 w-4" /> {getCancelActionState(selectedOrder).label}
+                  </Button>
+                )}
                 <Button variant="outline" onClick={() => void deleteOrder(selectedOrder.id)}>
                   <Trash2 className="mr-2 h-4 w-4" /> Delete
                 </Button>
@@ -1553,14 +1558,16 @@ const Orders = () => {
                     >
                       <CheckCircle className="mr-2 h-4 w-4" /> Delivered
                     </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => void updateStatus(order.id, 'mark_cancelled')}
-                      disabled={getCancelActionState(order).disabled}
-                    >
-                      <XCircle className="mr-2 h-4 w-4" /> {getCancelActionState(order).label}
-                    </Button>
+                    {!isDeliveredOrder(order) && (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => void updateStatus(order.id, 'mark_cancelled')}
+                        disabled={getCancelActionState(order).disabled}
+                      >
+                        <XCircle className="mr-2 h-4 w-4" /> {getCancelActionState(order).label}
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={() => void downloadDeliveryPdf(order.id)}>
                       <Download className="mr-2 h-4 w-4" /> PDF
                     </Button>
