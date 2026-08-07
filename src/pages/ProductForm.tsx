@@ -385,6 +385,8 @@ type StyleLibraryItem = {
 };
 const MAX_INLINE_SVG_CHARS = 50000;
 const MAX_PRODUCT_PAYLOAD_BYTES = 2500000;
+const trimToMax = (value: unknown, maxLength: number): string =>
+  String(value || '').trim().slice(0, maxLength);
 type MattressFormValue = NonNullable<ProductFormValues['mattresses']>[number];
 type FabricBulkDeleteTarget = {
   index: number;
@@ -2014,22 +2016,22 @@ const ProductForm = () => {
         slug: (data.slug || '').trim(),
         meta_title: (data.meta_title || '').trim(),
         meta_description: (data.meta_description || '').trim(),
-        google_feed_brand: (data.google_feed_brand || '').trim(),
-        google_feed_sku: (data.google_feed_sku || '').trim(),
-        google_feed_mpn: (data.google_feed_mpn || '').trim(),
-        google_feed_gtin: (data.google_feed_gtin || '').trim(),
-        google_feed_special_feature: (data.google_feed_special_feature || '').trim(),
-        google_feed_color: (data.google_feed_color || '').trim(),
-        google_feed_material: (data.google_feed_material || '').trim(),
-        google_feed_fabric_type: (data.google_feed_fabric_type || '').trim(),
-        google_feed_frame_material: (data.google_feed_frame_material || '').trim(),
-        google_feed_headboard_material: (data.google_feed_headboard_material || '').trim(),
-        google_feed_number_of_drawers: (data.google_feed_number_of_drawers || '').trim(),
-        google_feed_depth: (data.google_feed_depth || '').trim(),
-        google_feed_length: (data.google_feed_length || '').trim(),
-        google_feed_width: (data.google_feed_width || '').trim(),
-        google_feed_height: (data.google_feed_height || '').trim(),
-        google_feed_seat_height: (data.google_feed_seat_height || '').trim(),
+        google_feed_brand: trimToMax(data.google_feed_brand, 120),
+        google_feed_sku: trimToMax(data.google_feed_sku, 120),
+        google_feed_mpn: trimToMax(data.google_feed_mpn, 120),
+        google_feed_gtin: trimToMax(data.google_feed_gtin, 120),
+        google_feed_special_feature: trimToMax(data.google_feed_special_feature, 120),
+        google_feed_color: trimToMax(data.google_feed_color, 120),
+        google_feed_material: trimToMax(data.google_feed_material, 180),
+        google_feed_fabric_type: trimToMax(data.google_feed_fabric_type, 180),
+        google_feed_frame_material: trimToMax(data.google_feed_frame_material, 180),
+        google_feed_headboard_material: trimToMax(data.google_feed_headboard_material, 180),
+        google_feed_number_of_drawers: trimToMax(data.google_feed_number_of_drawers, 20),
+        google_feed_depth: trimToMax(data.google_feed_depth, 80),
+        google_feed_length: trimToMax(data.google_feed_length, 80),
+        google_feed_width: trimToMax(data.google_feed_width, 80),
+        google_feed_height: trimToMax(data.google_feed_height, 80),
+        google_feed_seat_height: trimToMax(data.google_feed_seat_height, 80),
         google_feed_variants: (data.google_feed_variants || [])
           .map((variant) => ({
             color: (variant?.color || '').trim(),
