@@ -178,16 +178,64 @@ const Mattresses = () => {
     () => subcategories.filter((sub) => (editing.subcategories || []).includes(sub.id)).map((sub) => sub.name),
     [editing.subcategories, subcategories]
   );
-  const scopedAssignableProducts = useMemo(() => {
+  const rawScopedAssignableProducts = useMemo(() => {
     const selectedCategories = Array.isArray(editing.categories) ? editing.categories : [];
     const selectedSubcategories = Array.isArray(editing.subcategories) ? editing.subcategories : [];
     if (selectedCategories.length === 0 && selectedSubcategories.length === 0) return [];
 
     return allProducts
       .filter((product) => !isMattressSourceProduct(product))
-      .filter((product) => productMatchesSelectedScope(product, selectedCategories, selectedSubcategories))
-      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      .filter((product) => productMatchesSelectedScope(product, selectedCategories, selectedSubcategories));
   }, [allProducts, editing.categories, editing.subcategories]);
+  const scopedAssignableProductGroups = useMemo(() => {
+    const selectedIds = new Set((editing.products || []).map(Number));
+    const groups = new Map<string, { product: Product; productIds: number[] }>();
+    const productById = new Map(allProducts.map((product) => [Number(product.id), product]));
+    const getOriginalProductId = (product: Product) => {
+      let originalId = Number(product.id);
+      let sourceId = Number(product.imported_from_product || 0);
+      const visited = new Set<number>([originalId]);
+      while (sourceId > 0 && !visited.has(sourceId)) {
+        originalId = sourceId;
+        visited.add(sourceId);
+        sourceId = Number(productById.get(sourceId)?.imported_from_product || 0);
+      }
+      return originalId;
+    };
+
+    rawScopedAssignableProducts.forEach((product) => {
+      const isKidsBeds =
+        product.category_slug === "kids-beds" ||
+        String(product.category_name || "").trim().toLowerCase() === "kids beds";
+      const key = isKidsBeds
+        ? `kids-beds:${getOriginalProductId(product)}`
+        : `product:${product.id}`;
+      const existing = groups.get(key);
+
+      if (!existing) {
+        groups.set(key, { product, productIds: [product.id] });
+        return;
+      }
+
+      existing.productIds.push(product.id);
+      const productIsSelected = selectedIds.has(product.id);
+      const existingIsSelected = selectedIds.has(existing.product.id);
+      if (
+        (productIsSelected && !existingIsSelected) ||
+        (productIsSelected === existingIsSelected && !product.imported_from_product && existing.product.imported_from_product)
+      ) {
+        existing.product = product;
+      }
+    });
+
+    return Array.from(groups.values()).sort((a, b) =>
+      String(a.product.name || "").localeCompare(String(b.product.name || ""))
+    );
+  }, [editing.products, rawScopedAssignableProducts]);
+  const scopedAssignableProducts = useMemo(
+    () => scopedAssignableProductGroups.map((group) => group.product),
+    [scopedAssignableProductGroups]
+  );
   const selectedProductNames = useMemo(
     () => allProducts.filter((product) => (editing.products || []).includes(product.id)).map((product) => product.name),
     [allProducts, editing.products]
@@ -228,7 +276,7 @@ const Mattresses = () => {
         setSubcategories(list);
       })
       .catch(() => setSubcategories([]));
-    apiGet<Product[]>("/products/?admin_picker=1")
+    apiGet<Product[]>("/products/?admin_summary=1")
       .then((res) => {
         const list = Array.isArray(res) ? res : [];
         setAllProducts(list);
@@ -245,7 +293,7 @@ const Mattresses = () => {
   }, []);
 
   useEffect(() => {
-    const allowedProductIds = new Set(scopedAssignableProducts.map((product) => product.id));
+    const allowedProductIds = new Set(rawScopedAssignableProducts.map((product) => product.id));
     setEditing((prev) => {
       const current = Array.isArray(prev.products) ? prev.products.map(Number).filter(Boolean) : [];
       const filtered = current.filter((id) => allowedProductIds.has(id));
@@ -254,7 +302,7 @@ const Mattresses = () => {
       if (isSame) return prev;
       return { ...prev, products: filtered };
     });
-  }, [scopedAssignableProducts]);
+  }, [rawScopedAssignableProducts]);
 
   const resetForm = () => {
     setEditing(emptyOption());
@@ -523,7 +571,9 @@ const Mattresses = () => {
                   <p className="text-xs text-muted-foreground">No bed products found for the current selection.</p>
                 )}
               {scopedAssignableProducts.map((product) => {
-                const checked = (editing.products || []).includes(product.id);
+                const group = scopedAssignableProductGroups.find((item) => item.product.id === product.id);
+                const groupProductIds = group?.productIds || [product.id];
+                const checked = groupProductIds.some((productId) => (editing.products || []).includes(productId));
                 return (
                   <label
                     key={product.id}
@@ -534,8 +584,11 @@ const Mattresses = () => {
                       checked={checked}
                       onChange={(e) => {
                         const next = new Set(editing.products || []);
-                        if (e.target.checked) next.add(product.id);
-                        else next.delete(product.id);
+                        if (e.target.checked) {
+                          next.add(product.id);
+                        } else {
+                          groupProductIds.forEach((productId) => next.delete(productId));
+                        }
                         setEditing({ ...editing, products: Array.from(next) });
                       }}
                     />
