@@ -196,16 +196,9 @@ const Mattresses = () => {
       let sourceId = Number(product.imported_from_product || 0);
       const visited = new Set<number>([originalId]);
       while (sourceId > 0 && !visited.has(sourceId)) {
-        const source = productById.get(sourceId);
-        if (
-          !source ||
-          String(source.name || "").trim().toLowerCase() !== String(product.name || "").trim().toLowerCase()
-        ) {
-          break;
-        }
         originalId = sourceId;
         visited.add(sourceId);
-        sourceId = Number(source.imported_from_product || 0);
+        sourceId = Number(productById.get(sourceId)?.imported_from_product || 0);
       }
       return originalId;
     };
@@ -592,7 +585,7 @@ const Mattresses = () => {
                       onChange={(e) => {
                         const next = new Set(editing.products || []);
                         if (e.target.checked) {
-                          groupProductIds.forEach((productId) => next.add(productId));
+                          next.add(product.id);
                         } else {
                           groupProductIds.forEach((productId) => next.delete(productId));
                         }
