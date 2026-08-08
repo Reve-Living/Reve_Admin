@@ -69,14 +69,9 @@ const isMattressCategory = (category: Pick<ApiCategory, "name" | "slug">) =>
   hasMattressKeyword(category.name, category.slug);
 
 const isMattressSourceProduct = (
-  product: Pick<Product, "category_name" | "category_slug" | "subcategory_name" | "subcategory_slug">
+  product: Pick<Product, "category_name" | "category_slug">
 ) =>
-  hasMattressKeyword(
-    product.category_name,
-    product.category_slug,
-    product.subcategory_name,
-    product.subcategory_slug
-  );
+  hasMattressKeyword(product.category_name, product.category_slug);
 
 const mapProductToMattressOption = (product: Product): MattressOption => ({
   ...emptyOption(),
