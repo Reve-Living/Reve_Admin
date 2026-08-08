@@ -17,6 +17,7 @@ const emptyOption = (): MattressOption => ({
   name: "",
   display_name: "",
   kids_button_label: "",
+  kids_button_sort_order: 0,
   description: "",
   features: "",
   image_url: "",
@@ -824,6 +825,25 @@ const Mattresses = () => {
               <p className="mt-1 text-xs text-muted-foreground">
                 Optional. Leave this blank to keep the normal single mattress list. Mattresses with the same label
                 will be grouped under one button in the Add a Mattress popup.
+              </p>
+            </label>
+            <label className="col-span-2 text-sm font-medium text-espresso">
+              Button label sort order
+              <input
+                type="number"
+                step="1"
+                min="0"
+                className="mt-1 w-full rounded-md border px-3 py-2 text-sm"
+                value={editing.kids_button_sort_order ?? 0}
+                onChange={(e) =>
+                  setEditing({
+                    ...editing,
+                    kids_button_sort_order: e.target.value === "" ? 0 : Number(e.target.value),
+                  })
+                }
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Controls the Top, Middle, Bottom or other button position. Use 1, 2, 3...; 0 appears after ordered labels.
               </p>
             </label>
             <label className="col-span-2 text-sm font-medium text-espresso">

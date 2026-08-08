@@ -227,6 +227,7 @@ export interface ProductMattress {
   name?: string;
   display_name?: string;
   kids_button_label?: string;
+  kids_button_sort_order?: number;
   description?: string;
   features?: string;
   image_url?: string;
